@@ -1,0 +1,16 @@
+{
+    "name": "com.sudoku.hint-engine",
+    "version": "1.0.0",
+    "displayName": "Simple Sudoku Solver",
+    "description": "External logical Sudoku solver for the Hint System.",
+    "unity": "2021.3",
+    "keywords": [
+        "sudoku",
+        "solver",
+        "hints"
+    ],
+    "author": {
+        "name": "kurtanr",
+        "url": "https://github.com/kurtanr/SimpleSudokuSolver"
+    }
+}
