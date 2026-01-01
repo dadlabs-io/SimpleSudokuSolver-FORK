@@ -53,7 +53,7 @@ namespace SimpleSudokuSolver.Strategy
                 // Check for Wing 1 (XZ) and Wing 2 (YZ)
                 // We need two wings: one sharing X (and having Z), one sharing Y (and having Z)
                 // where Z is the same 'common' candidate
-                
+
                 // Let's iterate all pairs of wings
                 for (int i = 0; i < potentialWings.Count; i++)
                 {
@@ -64,14 +64,14 @@ namespace SimpleSudokuSolver.Strategy
 
                         // Determine the Z candidate
                         // Wing1 must share one candidate with Pivot, Wing2 must share the OTHER candidate with Pivot
-                        
+
                         Cell wingX = null; // The wing that shares X
                         Cell wingY = null; // The wing that shares Y
 
                         if (wing1.CanBe.Contains(X) && !wing1.CanBe.Contains(Y)) wingX = wing1;
                         else if (wing1.CanBe.Contains(Y) && !wing1.CanBe.Contains(X)) wingY = wing1;
 
-                        if (wing2.CanBe.Contains(X) && !wing2.CanBe.Contains(Y)) 
+                        if (wing2.CanBe.Contains(X) && !wing2.CanBe.Contains(Y))
                         {
                             if (wingX != null) continue; // We already have a wingX
                             wingX = wing2;
@@ -86,7 +86,7 @@ namespace SimpleSudokuSolver.Strategy
 
                         // Now check if they share a common candidate Z (which is NOT X or Y)
                         var zCandidates = wingX.CanBe.Intersect(wingY.CanBe).Where(c => c != X && c != Y).ToList();
-                        
+
                         if (zCandidates.Count != 1) continue; // Must share exactly one Z
 
                         int Z = zCandidates[0];
@@ -111,7 +111,18 @@ namespace SimpleSudokuSolver.Strategy
 
                         if (eliminations.Count > 0)
                         {
-                            return new SingleStepSolution(eliminations.Distinct().ToArray(), StrategyName);
+                            var solution = new SingleStepSolution(eliminations.Distinct().ToArray(), StrategyName);
+                            solution.ContextData = new HintContextData
+                            {
+                                PrimaryCandidate = Z,
+                                FocusCells = new List<int[]>
+                                {
+                                    new int[] { pivot.RowIndex, pivot.ColumnIndex }, // Pivot
+                                    new int[] { wingX.RowIndex, wingX.ColumnIndex }, // Wing A
+                                    new int[] { wingY.RowIndex, wingY.ColumnIndex }  // Wing B
+                                }
+                            };
+                            return solution;
                         }
                     }
                 }
@@ -122,8 +133,8 @@ namespace SimpleSudokuSolver.Strategy
 
         private bool IsConnected(Cell a, Cell b)
         {
-            return a.RowIndex == b.RowIndex || 
-                   a.ColumnIndex == b.ColumnIndex || 
+            return a.RowIndex == b.RowIndex ||
+                   a.ColumnIndex == b.ColumnIndex ||
                    GetBlockIndex(a.RowIndex, a.ColumnIndex) == GetBlockIndex(b.RowIndex, b.ColumnIndex);
         }
 

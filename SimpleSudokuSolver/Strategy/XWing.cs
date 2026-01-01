@@ -5,219 +5,271 @@ using System.Linq;
 
 namespace SimpleSudokuSolver.Strategy
 {
-  /// <summary>
-  /// Strategy is iterating through each row:
-  /// - it is looking for a value which can be present only in two cells of the row
-  /// If such a value is found, and there is another row where situation is the same (same value, same two columns),
-  /// then all other candidates for this value in the two columns can be eliminated.
-  /// Same is true when iterating through columns instead of rows (then we are eliminating candidates in rows).
-  /// </summary>
-  /// <remarks>
-  /// See also:
-  /// - https://sudoku9x9.com/x_wing.html
-  /// - http://www.sudokuwiki.org/X_Wing_Strategy
-  /// </remarks>
-  public class XWing : ISudokuSolverStrategy
-  {
-    public string StrategyName => "X-Wing";
-
-    public SingleStepSolution SolveSingleStep(SudokuPuzzle sudokuPuzzle)
-    {
-      var eliminations = new List<SingleStepSolution.Candidate>();
-
-      var xWingMembersPerRow = GetXWingMembers(sudokuPuzzle, true);
-      eliminations.AddRange(GetEliminations(sudokuPuzzle, xWingMembersPerRow, true));
-
-      var xWingMembersPerColumn = GetXWingMembers(sudokuPuzzle, false);
-      eliminations.AddRange(GetEliminations(sudokuPuzzle, xWingMembersPerColumn, false));
-
-      return eliminations.Count > 0 ?
-        new SingleStepSolution(eliminations.Distinct().ToArray(), StrategyName) :
-        null;
-    }
-
     /// <summary>
-    /// Iterates the entire puzzle either per row or per columns and returns all found XWings.
+    /// Strategy is iterating through each row:
+    /// - it is looking for a value which can be present only in two cells of the row
+    /// If such a value is found, and there is another row where situation is the same (same value, same two columns),
+    /// then all other candidates for this value in the two columns can be eliminated.
+    /// Same is true when iterating through columns instead of rows (then we are eliminating candidates in rows).
     /// </summary>
-    /// <param name="sudokuPuzzle">Sudoku puzzle.</param>
-    /// <param name="perRow">Determines if the method is iterating per row or per column.</param>
-    /// <returns>
-    /// Tuple where:
-    /// - Item1 is the value which is in the XWing
-    /// - Item2, Item3, Item4, Item5 are four cells that are members of the XWing
-    /// </returns>
-    private Tuple<int, Cell, Cell, Cell, Cell>[] GetXWingMembers(SudokuPuzzle sudokuPuzzle, bool perRow)
+    /// <remarks>
+    /// See also:
+    /// - https://sudoku9x9.com/x_wing.html
+    /// - http://www.sudokuwiki.org/X_Wing_Strategy
+    /// </remarks>
+    public class XWing : ISudokuSolverStrategy
     {
-      var candidatesPerRow = new List<Tuple<int, int, int>[]>();
-      var candidatesPerColumn = new List<Tuple<int, int, int>[]>();
+        public string StrategyName => "X-Wing";
 
-      Tuple<int, int, int>[] ToCandidatesWithRowOrCellIndex(Tuple<int, Cell, Cell>[] candidates)
-      {
-        return candidates.Select(
-          x =>
-          {
-            var cell1 = x.Item2;
-            var cell2 = x.Item3;
-            return new Tuple<int, int, int>(x.Item1, 
-              perRow ? cell1.ColumnIndex : cell1.RowIndex,
-              perRow ? cell2.ColumnIndex : cell2.RowIndex);
-          }
-        ).ToArray();
-      }
-
-      var xWingMembers = new List<Tuple<int, Cell, Cell, Cell, Cell>>();
-
-      if (perRow)
-      {
-        for (int i = 0; i < sudokuPuzzle.Rows.Length; i++)
+        public SingleStepSolution SolveSingleStep(SudokuPuzzle sudokuPuzzle)
         {
-          var candidates = GetCandidates(sudokuPuzzle.Rows[i].Cells, sudokuPuzzle.PossibleCellValues);
-          var candidatesWithColumnIndex = ToCandidatesWithRowOrCellIndex(candidates);
-          candidatesPerRow.Add(candidatesWithColumnIndex);
+            // Check Rows for X-Wings (eliminating in columns)
+            var solution = FindXWingSolution(sudokuPuzzle, true);
+            if (solution != null) return solution;
+
+            // Check Columns for X-Wings (eliminating in rows)
+            solution = FindXWingSolution(sudokuPuzzle, false);
+            if (solution != null) return solution;
+
+            return null;
         }
 
-        for (int i = 0; i < sudokuPuzzle.Rows.Length - 1; i++)
+        private SingleStepSolution FindXWingSolution(SudokuPuzzle sudokuPuzzle, bool perRow)
         {
-          var row1 = candidatesPerRow[i];
+            var xWingMembers = GetXWingMembers(sudokuPuzzle, perRow);
 
-          for (int j = i + 1; j < sudokuPuzzle.Rows.Length; j++)
-          {
-            var row2 = candidatesPerRow[j];
-
-            var intersect = row1.Intersect(row2).ToArray();
-            if (intersect.Length > 0)
+            foreach (var xWing in xWingMembers)
             {
-              foreach (var intersectInstance in intersect)
-              {
-                var value = intersectInstance.Item1;
-                var cell1 = sudokuPuzzle.Cells[i, intersectInstance.Item2];
-                var cell2 = sudokuPuzzle.Cells[i, intersectInstance.Item3];
-                var cell3 = sudokuPuzzle.Cells[j, intersectInstance.Item2];
-                var cell4 = sudokuPuzzle.Cells[j, intersectInstance.Item3];
-                xWingMembers.Add(new Tuple<int, Cell, Cell, Cell, Cell>(value, cell1, cell2, cell3, cell4));
-              }
+                // Check if THIS specific X-Wing yields eliminations
+                // We pass an array of just this one X-Wing to reuse valid helper logic
+                var eliminations = GetEliminations(sudokuPuzzle, new[] { xWing }, perRow);
+
+                if (eliminations.Length > 0)
+                {
+                    var solution = new SingleStepSolution(eliminations.Distinct().ToArray(), StrategyName);
+
+                    // Populate ContextData
+                    solution.ContextData = new HintContextData();
+                    solution.ContextData.PrimaryCandidate = xWing.Item1;
+
+                    // FocusCells: The 4 corners
+                    // Tuple is <Value, TopLeft, TopRight, BottomLeft, BottomRight> (or similar, depending on how it was found)
+                    // Item2, Item3 are "first row/col" pair, Item4, Item5 are "second row/col" pair
+                    solution.ContextData.FocusCells.Add(new int[] { xWing.Item2.RowIndex, xWing.Item2.ColumnIndex });
+                    solution.ContextData.FocusCells.Add(new int[] { xWing.Item3.RowIndex, xWing.Item3.ColumnIndex });
+                    solution.ContextData.FocusCells.Add(new int[] { xWing.Item4.RowIndex, xWing.Item4.ColumnIndex });
+                    solution.ContextData.FocusCells.Add(new int[] { xWing.Item5.RowIndex, xWing.Item5.ColumnIndex });
+
+                    // HouseIndices: The 2 lines that form the base
+                    // If perRow=true (Row X-Wing), the base is the ROWS (indices 0-8)
+                    // If perRow=false (Col X-Wing), the base is the COLS (indices 9-17)
+                    // BUT WAIT: The elimination happens in the OTHER direction.
+                    // Standard definition: "Row X-Wing" checks rows, finding 2 rows where candidate is in only 2 spots (same cols).
+                    // The logical "base" sets are the Rows. The eliminations happen in the Columns.
+                    // For visualization, we usually highlight the "Sweeping" lines where we searched (the Base).
+                    // So if perRow=true, we highlight the ROWS.
+
+                    if (perRow)
+                    {
+                        // Add Row indices (0-8)
+                        solution.ContextData.HouseIndices.Add(xWing.Item2.RowIndex);
+                        solution.ContextData.HouseIndices.Add(xWing.Item4.RowIndex); // Item4 is in the second row
+                    }
+                    else
+                    {
+                        // Add Col indices (9-17)
+                        solution.ContextData.HouseIndices.Add(xWing.Item2.ColumnIndex + 9);
+                        solution.ContextData.HouseIndices.Add(xWing.Item4.ColumnIndex + 9);
+                    }
+
+                    return solution;
+                }
             }
-          }
-        }
-      }
-      else
-      {
-        for (int i = 0; i < sudokuPuzzle.Columns.Length; i++)
-        {
-          var candidates = GetCandidates(sudokuPuzzle.Columns[i].Cells, sudokuPuzzle.PossibleCellValues);
-          var candidatesWithRowIndex = ToCandidatesWithRowOrCellIndex(candidates);
-          candidatesPerColumn.Add(candidatesWithRowIndex);
+            return null;
         }
 
-        for (int i = 0; i < sudokuPuzzle.Columns.Length - 1; i++)
+        /// <summary>
+        /// Iterates the entire puzzle either per row or per columns and returns all found XWings.
+        /// </summary>
+        /// <param name="sudokuPuzzle">Sudoku puzzle.</param>
+        /// <param name="perRow">Determines if the method is iterating per row or per column.</param>
+        /// <returns>
+        /// Tuple where:
+        /// - Item1 is the value which is in the XWing
+        /// - Item2, Item3, Item4, Item5 are four cells that are members of the XWing
+        /// </returns>
+        private Tuple<int, Cell, Cell, Cell, Cell>[] GetXWingMembers(SudokuPuzzle sudokuPuzzle, bool perRow)
         {
-          var column1 = candidatesPerColumn[i];
+            var candidatesPerRow = new List<Tuple<int, int, int>[]>();
+            var candidatesPerColumn = new List<Tuple<int, int, int>[]>();
 
-          for (int j = i + 1; j < sudokuPuzzle.Columns.Length; j++)
-          {
-            var column2 = candidatesPerColumn[j];
-
-            var intersect = column1.Intersect(column2).ToArray();
-            if (intersect.Length > 0)
+            Tuple<int, int, int>[] ToCandidatesWithRowOrCellIndex(Tuple<int, Cell, Cell>[] candidates)
             {
-              foreach (var intersectInstance in intersect)
-              {
-                var value = intersectInstance.Item1;
-                var cell1 = sudokuPuzzle.Cells[intersectInstance.Item2, i];
-                var cell2 = sudokuPuzzle.Cells[intersectInstance.Item3, i];
-                var cell3 = sudokuPuzzle.Cells[intersectInstance.Item2, j];
-                var cell4 = sudokuPuzzle.Cells[intersectInstance.Item3, j];
-                xWingMembers.Add(new Tuple<int, Cell, Cell, Cell, Cell>(value, cell1, cell2, cell3, cell4));
-              }
+                return candidates.Select(
+                  x =>
+                  {
+                      var cell1 = x.Item2;
+                      var cell2 = x.Item3;
+                      return new Tuple<int, int, int>(x.Item1,
+                perRow ? cell1.ColumnIndex : cell1.RowIndex,
+                perRow ? cell2.ColumnIndex : cell2.RowIndex);
+                  }
+                ).ToArray();
             }
-          }
+
+            var xWingMembers = new List<Tuple<int, Cell, Cell, Cell, Cell>>();
+
+            if (perRow)
+            {
+                for (int i = 0; i < sudokuPuzzle.Rows.Length; i++)
+                {
+                    var candidates = GetCandidates(sudokuPuzzle.Rows[i].Cells, sudokuPuzzle.PossibleCellValues);
+                    var candidatesWithColumnIndex = ToCandidatesWithRowOrCellIndex(candidates);
+                    candidatesPerRow.Add(candidatesWithColumnIndex);
+                }
+
+                for (int i = 0; i < sudokuPuzzle.Rows.Length - 1; i++)
+                {
+                    var row1 = candidatesPerRow[i];
+
+                    for (int j = i + 1; j < sudokuPuzzle.Rows.Length; j++)
+                    {
+                        var row2 = candidatesPerRow[j];
+
+                        var intersect = row1.Intersect(row2).ToArray();
+                        if (intersect.Length > 0)
+                        {
+                            foreach (var intersectInstance in intersect)
+                            {
+                                var value = intersectInstance.Item1;
+                                var cell1 = sudokuPuzzle.Cells[i, intersectInstance.Item2];
+                                var cell2 = sudokuPuzzle.Cells[i, intersectInstance.Item3];
+                                var cell3 = sudokuPuzzle.Cells[j, intersectInstance.Item2];
+                                var cell4 = sudokuPuzzle.Cells[j, intersectInstance.Item3];
+                                xWingMembers.Add(new Tuple<int, Cell, Cell, Cell, Cell>(value, cell1, cell2, cell3, cell4));
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                for (int i = 0; i < sudokuPuzzle.Columns.Length; i++)
+                {
+                    var candidates = GetCandidates(sudokuPuzzle.Columns[i].Cells, sudokuPuzzle.PossibleCellValues);
+                    var candidatesWithRowIndex = ToCandidatesWithRowOrCellIndex(candidates);
+                    candidatesPerColumn.Add(candidatesWithRowIndex);
+                }
+
+                for (int i = 0; i < sudokuPuzzle.Columns.Length - 1; i++)
+                {
+                    var column1 = candidatesPerColumn[i];
+
+                    for (int j = i + 1; j < sudokuPuzzle.Columns.Length; j++)
+                    {
+                        var column2 = candidatesPerColumn[j];
+
+                        var intersect = column1.Intersect(column2).ToArray();
+                        if (intersect.Length > 0)
+                        {
+                            foreach (var intersectInstance in intersect)
+                            {
+                                var value = intersectInstance.Item1;
+                                var cell1 = sudokuPuzzle.Cells[intersectInstance.Item2, i];
+                                var cell2 = sudokuPuzzle.Cells[intersectInstance.Item3, i];
+                                var cell3 = sudokuPuzzle.Cells[intersectInstance.Item2, j];
+                                var cell4 = sudokuPuzzle.Cells[intersectInstance.Item3, j];
+                                xWingMembers.Add(new Tuple<int, Cell, Cell, Cell, Cell>(value, cell1, cell2, cell3, cell4));
+                            }
+                        }
+                    }
+                }
+            }
+
+            return xWingMembers.ToArray();
         }
-      }
 
-      return xWingMembers.ToArray();
-    }
-
-    /// <summary>
-    /// Returns all the candidates that can be eliminated using the XWings.
-    /// </summary>
-    private SingleStepSolution.Candidate[] GetEliminations(SudokuPuzzle sudokuPuzzle, Tuple<int, Cell, Cell, Cell, Cell>[] xWingMembers, bool perRow)
-    {
-      var eliminations = new List<SingleStepSolution.Candidate>();
-
-      foreach (var xWingMember in xWingMembers)
-      {
-        var value = xWingMember.Item1;
-
-        // diagonal cells
-        var firstCell = xWingMember.Item2;
-        var secondCell = xWingMember.Item5;
-
-        if (perRow)
+        /// <summary>
+        /// Returns all the candidates that can be eliminated using the XWings.
+        /// </summary>
+        private SingleStepSolution.Candidate[] GetEliminations(SudokuPuzzle sudokuPuzzle, Tuple<int, Cell, Cell, Cell, Cell>[] xWingMembers, bool perRow)
         {
-          var column1 = sudokuPuzzle.Columns[firstCell.ColumnIndex];
-          var column2 = sudokuPuzzle.Columns[secondCell.ColumnIndex];
-          var row1Index = firstCell.RowIndex;
-          var row2Index = secondCell.RowIndex;
+            var eliminations = new List<SingleStepSolution.Candidate>();
 
-          // eliminations are those cell that:
-          // - are in 'column1' or 'column2'
-          // - 'value' is a possible value for that cell
-          // - are not in row1Index or row2Index
-          foreach (var cell in column1.Cells.Union(column2.Cells))
-          {
-            if (cell.CanBe.Contains(value) && cell.RowIndex != row1Index && cell.RowIndex != row2Index)
-              eliminations.Add(new SingleStepSolution.Candidate(cell.RowIndex, cell.ColumnIndex, value));
-          }
+            foreach (var xWingMember in xWingMembers)
+            {
+                var value = xWingMember.Item1;
+
+                // diagonal cells
+                var firstCell = xWingMember.Item2;
+                var secondCell = xWingMember.Item5;
+
+                if (perRow)
+                {
+                    var column1 = sudokuPuzzle.Columns[firstCell.ColumnIndex];
+                    var column2 = sudokuPuzzle.Columns[secondCell.ColumnIndex];
+                    var row1Index = firstCell.RowIndex;
+                    var row2Index = secondCell.RowIndex;
+
+                    // eliminations are those cell that:
+                    // - are in 'column1' or 'column2'
+                    // - 'value' is a possible value for that cell
+                    // - are not in row1Index or row2Index
+                    foreach (var cell in column1.Cells.Union(column2.Cells))
+                    {
+                        if (cell.CanBe.Contains(value) && cell.RowIndex != row1Index && cell.RowIndex != row2Index)
+                            eliminations.Add(new SingleStepSolution.Candidate(cell.RowIndex, cell.ColumnIndex, value));
+                    }
+                }
+                else
+                {
+                    var row1 = sudokuPuzzle.Rows[firstCell.RowIndex];
+                    var row2 = sudokuPuzzle.Rows[secondCell.RowIndex];
+                    var column1Index = firstCell.ColumnIndex;
+                    var column2Index = secondCell.ColumnIndex;
+
+                    // eliminations are those cell that:
+                    // - are in 'row1' or 'row2'
+                    // - 'value' is a possible value for that cell
+                    // - are not in column1Index or column2Index
+                    foreach (var cell in row1.Cells.Union(row2.Cells))
+                    {
+                        if (cell.CanBe.Contains(value) && cell.ColumnIndex != column1Index && cell.ColumnIndex != column2Index)
+                            eliminations.Add(new SingleStepSolution.Candidate(cell.RowIndex, cell.ColumnIndex, value));
+                    }
+                }
+            }
+
+
+            return eliminations.ToArray();
         }
-        else
+
+        /// <summary>
+        /// For each value in <paramref name="possibleCellValues"/> method iterates through all the <paramref name="cells"/> 
+        /// and is looking for a pair of cells that are the only cells that can contain the possible value.
+        /// </summary>
+        /// <param name="cells">Cells of a row or column.</param>
+        /// <param name="possibleCellValues"><see cref="SudokuPuzzle.PossibleCellValues"/></param>
+        /// <returns>
+        /// Tuple where:
+        /// - Item1 is possible value
+        /// - Item2 is first cell containing possible value
+        /// - Item3 is second cell containing possible value
+        /// </returns>
+        private Tuple<int, Cell, Cell>[] GetCandidates(Cell[] cells, int[] possibleCellValues)
         {
-          var row1 = sudokuPuzzle.Rows[firstCell.RowIndex];
-          var row2 = sudokuPuzzle.Rows[secondCell.RowIndex];
-          var column1Index = firstCell.ColumnIndex;
-          var column2Index = secondCell.ColumnIndex;
+            var result = new List<Tuple<int, Cell, Cell>>();
 
-          // eliminations are those cell that:
-          // - are in 'row1' or 'row2'
-          // - 'value' is a possible value for that cell
-          // - are not in column1Index or column2Index
-          foreach (var cell in row1.Cells.Union(row2.Cells))
-          {
-            if (cell.CanBe.Contains(value) && cell.ColumnIndex != column1Index && cell.ColumnIndex != column2Index)
-              eliminations.Add(new SingleStepSolution.Candidate(cell.RowIndex, cell.ColumnIndex, value));
-          }
+            foreach (var possibleCellValue in possibleCellValues)
+            {
+                var cellsContaingValue = cells.Where(x => x.CanBe.Contains(possibleCellValue)).ToArray();
+                if (cellsContaingValue.Length == 2)
+                {
+                    result.Add(new Tuple<int, Cell, Cell>(possibleCellValue, cellsContaingValue[0], cellsContaingValue[1]));
+                }
+            }
+
+            return result.ToArray();
         }
-      }
-
-
-      return eliminations.ToArray();
     }
-
-    /// <summary>
-    /// For each value in <paramref name="possibleCellValues"/> method iterates through all the <paramref name="cells"/> 
-    /// and is looking for a pair of cells that are the only cells that can contain the possible value.
-    /// </summary>
-    /// <param name="cells">Cells of a row or column.</param>
-    /// <param name="possibleCellValues"><see cref="SudokuPuzzle.PossibleCellValues"/></param>
-    /// <returns>
-    /// Tuple where:
-    /// - Item1 is possible value
-    /// - Item2 is first cell containing possible value
-    /// - Item3 is second cell containing possible value
-    /// </returns>
-    private Tuple<int, Cell, Cell>[] GetCandidates(Cell[] cells, int[] possibleCellValues)
-    {
-      var result = new List<Tuple<int, Cell, Cell>>();
-
-      foreach (var possibleCellValue in possibleCellValues)
-      {
-        var cellsContaingValue = cells.Where(x => x.CanBe.Contains(possibleCellValue)).ToArray();
-        if (cellsContaingValue.Length == 2)
-        {
-          result.Add(new Tuple<int, Cell, Cell>(possibleCellValue, cellsContaingValue[0], cellsContaingValue[1]));
-        }
-      }
-
-      return result.ToArray();
-    }
-  }
 }
