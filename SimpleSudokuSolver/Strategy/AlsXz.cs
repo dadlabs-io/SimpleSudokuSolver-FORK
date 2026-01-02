@@ -56,9 +56,9 @@ namespace SimpleSudokuSolver.Strategy
                                     var solution = new SingleStepSolution(eliminations.ToArray(), StrategyName);
                                     solution.ContextData = new HintContextData
                                     {
-                                        FocusCells = als1.Cells.Select(c => new int[] { c.RowIndex, c.ColumnIndex })
-                                            .Union(als2.Cells.Select(c => new int[] { c.RowIndex, c.ColumnIndex }))
-                                            .ToList()
+                                        FocusCells = als1.Cells.Select(c => new int[] { c.RowIndex, c.ColumnIndex }).ToList(),
+                                        ReasoningCells = als2.Cells.Select(c => new int[] { c.RowIndex, c.ColumnIndex }).ToList(),
+                                        PrimaryCandidate = x
                                     };
                                     return solution;
                                 }
