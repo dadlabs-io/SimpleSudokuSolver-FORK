@@ -42,6 +42,8 @@ namespace SimpleSudokuSolver
           new HiddenTriple(),
           new HiddenQuad(),
           new XWing(),
+          new XYWing(),
+          new AlsXz(),
           new Backtracking()
         };
       }
