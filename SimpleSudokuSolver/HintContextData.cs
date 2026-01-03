@@ -3,8 +3,16 @@ using System.Collections.Generic;
 namespace SimpleSudokuSolver
 {
     /// <summary>
-    /// detailed context about a hint to help UI visualization (e.g. pattern cells, pivot cells).
+    /// Detailed context about a hint to help UI visualization (e.g. pattern cells, pivot cells).
     /// This allows the UI to display complex strategies without re-calculating the pattern logic.
+    /// 
+    /// INDEXING CONVENTIONS:
+    /// - Cell coordinates (row, col): ALWAYS 0-indexed (0-8)
+    /// - Candidate values: 1-9 (standard Sudoku values)
+    /// - HouseIndices encoding:
+    ///   * Rows: 0-8 (row 0 = first row)
+    ///   * Columns: 9-17 (column 9 = first column)
+    ///   * Blocks: 18-26 (block 18 = top-left block)
     /// </summary>
     public class HintContextData
     {
@@ -40,5 +48,15 @@ namespace SimpleSudokuSolver
         /// The primary candidate value being acted upon (if applicable).
         /// </summary>
         public int? PrimaryCandidate { get; set; }
+
+        /// <summary>
+        /// Candidates associated with the FocusCells (e.g. ALS Set A candidates).
+        /// </summary>
+        public List<int> FocusCandidates { get; set; } = new List<int>();
+
+        /// <summary>
+        /// Candidates associated with the ReasoningCells (e.g. ALS Set B candidates).
+        /// </summary>
+        public List<int> ReasoningCandidates { get; set; } = new List<int>();
     }
 }
