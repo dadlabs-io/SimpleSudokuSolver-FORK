@@ -131,11 +131,23 @@ namespace SimpleSudokuSolver.Strategy
                 AddConjugatePairIfExists(graph, colCells, candidate);
             }
 
-            // Check all blocks
-            for (int block = 0; block < 9; block++)
+            // Check all blocks (Blocks is a 2D array [3,3], each block has 2D Cells [3,3])
+            for (int blockRow = 0; blockRow < 3; blockRow++)
             {
-                Cell[] blockCells = puzzle.Blocks[block].Cells;
-                AddConjugatePairIfExists(graph, blockCells, candidate);
+                for (int blockCol = 0; blockCol < 3; blockCol++)
+                {
+                    Block block = puzzle.Blocks[blockRow, blockCol];
+                    // Flatten the block's 2D cells into a 1D array
+                    List<Cell> blockCells = new List<Cell>();
+                    for (int r = 0; r < 3; r++)
+                    {
+                        for (int c = 0; c < 3; c++)
+                        {
+                            blockCells.Add(block.Cells[r, c]);
+                        }
+                    }
+                    AddConjugatePairIfExists(graph, blockCells.ToArray(), candidate);
+                }
             }
 
             return graph;
