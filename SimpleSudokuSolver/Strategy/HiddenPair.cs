@@ -1,4 +1,4 @@
-﻿using SimpleSudokuSolver.Model;
+using SimpleSudokuSolver.Model;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -23,12 +23,12 @@ namespace SimpleSudokuSolver.Strategy
       return GetSingleStepSolution(sudokuPuzzle, StrategyName);
     }
 
-    protected override IEnumerable<SingleStepSolution.Candidate> GetHiddenEliminations(
+    protected override HiddenSetResult GetHiddenEliminations(
       IEnumerable<Cell> cells, SudokuPuzzle sudokuPuzzle)
     {
-      var cellsWithNoValue = cells.Where(x => !x.HasValue).ToArray();
-      var hiddenCandidates = GetHiddenCandidates(cellsWithNoValue, sudokuPuzzle, 2);
-      var eliminations = new List<SingleStepSolution.Candidate>();
+      HiddenSetResult result = HiddenSetResult.Empty;
+      Cell[] cellsWithNoValue = cells.Where(x => !x.HasValue).ToArray();
+      IDictionary<int, Cell[]> hiddenCandidates = GetHiddenCandidates(cellsWithNoValue, sudokuPuzzle, 2);
 
       for (int i = 1; i <= sudokuPuzzle.NumberOfRowsOrColumnsInPuzzle - 1; i++)
       {
@@ -38,13 +38,20 @@ namespace SimpleSudokuSolver.Strategy
             hiddenCandidates.ContainsKey(j) &&
             hiddenCandidates[i].SequenceEqual(hiddenCandidates[j]))
           {
-            eliminations.AddRange(GetEliminations(hiddenCandidates[i][0], i, j));
-            eliminations.AddRange(GetEliminations(hiddenCandidates[i][1], i, j));
+            // Found a Hidden Pair! Capture context for visualization
+            result.FocusCells = hiddenCandidates[i]; // The 2 cells forming the hidden pair
+            result.HiddenValues = new int[] { i, j }; // The 2 hidden values
+
+            // Add eliminations (remove OTHER candidates from these cells)
+            result.Eliminations.AddRange(GetEliminations(hiddenCandidates[i][0], i, j));
+            result.Eliminations.AddRange(GetEliminations(hiddenCandidates[i][1], i, j));
+
+            return result; // Return first found
           }
         }
       }
 
-      return eliminations;
+      return result;
     }
   }
 }

@@ -1,36 +1,122 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using SimpleSudokuSolver.Model;
 
 namespace SimpleSudokuSolver.Strategy
 {
+  /// <summary>
+  /// Result from GetHiddenEliminations containing both eliminations and context for visualization.
+  /// </summary>
+  public struct HiddenSetResult
+  {
+    /// <summary>
+    /// Candidates to eliminate from the hidden set cells.
+    /// </summary>
+    public List<SingleStepSolution.Candidate> Eliminations;
+
+    /// <summary>
+    /// The N cells forming the hidden set (e.g., 2 cells for Hidden Pair).
+    /// </summary>
+    public Cell[] FocusCells;
+
+    /// <summary>
+    /// The N hidden candidate values that define the set (e.g., {3, 7} for a Hidden Pair).
+    /// </summary>
+    public int[] HiddenValues;
+
+    /// <summary>
+    /// Creates an empty result with initialized Eliminations list.
+    /// </summary>
+    public static HiddenSetResult Empty => new HiddenSetResult
+    {
+      Eliminations = new List<SingleStepSolution.Candidate>(),
+      FocusCells = null,
+      HiddenValues = null
+    };
+  }
+
   public abstract class HiddenPairTripleQuadBase
   {
-    protected abstract IEnumerable<SingleStepSolution.Candidate> GetHiddenEliminations(
+    /// <summary>
+    /// Finds hidden set eliminations within a house (row, column, or block).
+    /// Returns both eliminations AND context about which cells/values form the hidden set.
+    /// </summary>
+    protected abstract HiddenSetResult GetHiddenEliminations(
       IEnumerable<Cell> cells, SudokuPuzzle sudokuPuzzle);
 
     protected SingleStepSolution GetSingleStepSolution(SudokuPuzzle sudokuPuzzle, string strategyName)
     {
-      var eliminations = new List<SingleStepSolution.Candidate>();
-
-      foreach (var row in sudokuPuzzle.Rows)
+      // Try rows first (house indices 0-8)
+      for (int i = 0; i < sudokuPuzzle.Rows.Length; i++)
       {
-        eliminations.AddRange(GetHiddenEliminations(row.Cells, sudokuPuzzle));
+        HiddenSetResult result = GetHiddenEliminations(sudokuPuzzle.Rows[i].Cells, sudokuPuzzle);
+        if (result.Eliminations != null && result.Eliminations.Count > 0)
+        {
+          SingleStepSolution solution = new SingleStepSolution(result.Eliminations.Distinct().ToArray(), strategyName);
+          solution.ContextData = BuildContextData(result, i); // Row index 0-8
+          return solution;
+        }
       }
 
-      foreach (var column in sudokuPuzzle.Columns)
+      // Try columns (house indices 9-17)
+      for (int i = 0; i < sudokuPuzzle.Columns.Length; i++)
       {
-        eliminations.AddRange(GetHiddenEliminations(column.Cells, sudokuPuzzle));
+        HiddenSetResult result = GetHiddenEliminations(sudokuPuzzle.Columns[i].Cells, sudokuPuzzle);
+        if (result.Eliminations != null && result.Eliminations.Count > 0)
+        {
+          SingleStepSolution solution = new SingleStepSolution(result.Eliminations.Distinct().ToArray(), strategyName);
+          solution.ContextData = BuildContextData(result, 9 + i); // Column index 9-17
+          return solution;
+        }
       }
 
-      foreach (var block in sudokuPuzzle.Blocks)
+      // Try blocks (house indices 18-26)
+      // Blocks is a 2D array [row, col], iterate and track flat index
+      int blockIndex = 0;
+      for (int r = 0; r < sudokuPuzzle.Blocks.GetLength(0); r++)
       {
-        eliminations.AddRange(GetHiddenEliminations(block.Cells.OfType<Cell>(), sudokuPuzzle));
+        for (int c = 0; c < sudokuPuzzle.Blocks.GetLength(1); c++)
+        {
+          HiddenSetResult result = GetHiddenEliminations(sudokuPuzzle.Blocks[r, c].Cells.OfType<Cell>(), sudokuPuzzle);
+          if (result.Eliminations != null && result.Eliminations.Count > 0)
+          {
+            SingleStepSolution solution = new SingleStepSolution(result.Eliminations.Distinct().ToArray(), strategyName);
+            solution.ContextData = BuildContextData(result, 18 + blockIndex); // Block index 18-26
+            return solution;
+          }
+          blockIndex++;
+        }
       }
 
-      return eliminations.Count > 0 ?
-        new SingleStepSolution(eliminations.Distinct().ToArray(), strategyName) :
-        null;
+      return null;
+    }
+
+    /// <summary>
+    /// Builds HintContextData from the HiddenSetResult for UI visualization.
+    /// </summary>
+    private HintContextData BuildContextData(HiddenSetResult result, int houseIndex)
+    {
+      HintContextData context = new HintContextData();
+
+      // FocusCells: The cells forming the hidden set (0-indexed [row, col])
+      if (result.FocusCells != null)
+      {
+        foreach (Cell cell in result.FocusCells)
+        {
+          context.FocusCells.Add(new int[] { cell.RowIndex, cell.ColumnIndex });
+        }
+      }
+
+      // FocusCandidates: The hidden values that define the set
+      if (result.HiddenValues != null)
+      {
+        context.FocusCandidates.AddRange(result.HiddenValues);
+      }
+
+      // HouseIndices: Which house contains this pattern
+      context.HouseIndices.Add(houseIndex);
+
+      return context;
     }
 
     /// <summary>

@@ -1,4 +1,4 @@
-﻿using SimpleSudokuSolver.Model;
+using SimpleSudokuSolver.Model;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -23,12 +23,12 @@ namespace SimpleSudokuSolver.Strategy
       return GetSingleStepSolution(sudokuPuzzle, StrategyName);
     }
 
-    protected override IEnumerable<SingleStepSolution.Candidate> GetHiddenEliminations(
+    protected override HiddenSetResult GetHiddenEliminations(
       IEnumerable<Cell> cells, SudokuPuzzle sudokuPuzzle)
     {
-      var cellsWithNoValue = cells.Where(x => !x.HasValue).ToArray();
-      var hiddenCandidates = GetHiddenCandidates(cellsWithNoValue, sudokuPuzzle, 2, 3);
-      var eliminations = new List<SingleStepSolution.Candidate>();
+      HiddenSetResult result = HiddenSetResult.Empty;
+      Cell[] cellsWithNoValue = cells.Where(x => !x.HasValue).ToArray();
+      IDictionary<int, Cell[]> hiddenCandidates = GetHiddenCandidates(cellsWithNoValue, sudokuPuzzle, 2, 3);
 
       for (int i = 1; i <= sudokuPuzzle.NumberOfRowsOrColumnsInPuzzle - 2; i++)
       {
@@ -40,21 +40,28 @@ namespace SimpleSudokuSolver.Strategy
               hiddenCandidates.ContainsKey(j) &&
               hiddenCandidates.ContainsKey(k))
             {
-              var union = hiddenCandidates[i].Union(hiddenCandidates[j]).
+              Cell[] union = hiddenCandidates[i].Union(hiddenCandidates[j]).
                 Union(hiddenCandidates[k]).Distinct().ToArray();
               if (union.Length == 3)
               {
-                foreach (var cell in union)
+                // Found a Hidden Triple! Capture context for visualization
+                result.FocusCells = union; // The 3 cells forming the hidden triple
+                result.HiddenValues = new int[] { i, j, k }; // The 3 hidden values
+
+                // Add eliminations (remove OTHER candidates from these cells)
+                foreach (Cell cell in union)
                 {
-                  eliminations.AddRange(GetEliminations(cell, i, j, k));
+                  result.Eliminations.AddRange(GetEliminations(cell, i, j, k));
                 }
+
+                return result; // Return first found
               }
             }
           }
         }
       }
 
-      return eliminations;
+      return result;
     }
   }
 }
