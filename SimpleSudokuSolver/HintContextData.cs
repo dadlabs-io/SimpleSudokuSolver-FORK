@@ -65,5 +65,13 @@ namespace SimpleSudokuSolver
         /// Stored as [row, col] zero-indexed.
         /// </summary>
         public List<int[]> FinCells { get; set; } = new List<int[]>();
+
+        /// <summary>
+        /// Bridge house index for W-Wing patterns.
+        /// The bridge is the house containing the strong link connecting two bivalue cells.
+        /// Uses standard house encoding: 0-8 rows, 9-17 columns, 18-26 blocks.
+        /// Value of -1 means not set.
+        /// </summary>
+        public int BridgeHouseIndex { get; set; } = -1;
     }
 }

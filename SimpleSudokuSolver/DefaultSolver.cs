@@ -46,6 +46,9 @@ namespace SimpleSudokuSolver
           new Jellyfish(),
           new FinnedFish(),
           new XYWing(),
+          new XYZWing(),
+          new WWing(),
+          new WXYZWing(),
           new AlsXz(),
           new Backtracking()
         };
