@@ -58,5 +58,12 @@ namespace SimpleSudokuSolver
         /// Candidates associated with the ReasoningCells (e.g. ALS Set B candidates).
         /// </summary>
         public List<int> ReasoningCandidates { get; set; } = new List<int>();
+
+        /// <summary>
+        /// Fin cells for finned fish patterns.
+        /// The fin is an extra candidate in one base house that restricts eliminations.
+        /// Stored as [row, col] zero-indexed.
+        /// </summary>
+        public List<int[]> FinCells { get; set; } = new List<int[]>();
     }
 }

@@ -1,4 +1,4 @@
-﻿using SimpleSudokuSolver.Model;
+using SimpleSudokuSolver.Model;
 using SimpleSudokuSolver.Strategy;
 
 namespace SimpleSudokuSolver
@@ -43,6 +43,8 @@ namespace SimpleSudokuSolver
           new HiddenQuad(),
           new XWing(),
           new Swordfish(),
+          new Jellyfish(),
+          new FinnedFish(),
           new XYWing(),
           new AlsXz(),
           new Backtracking()
