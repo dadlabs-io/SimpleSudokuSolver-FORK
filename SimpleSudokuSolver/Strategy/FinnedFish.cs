@@ -198,13 +198,13 @@ namespace SimpleSudokuSolver.Strategy
             if (eliminations.Count == 0) return null;
 
             // Set strategy name based on size
-            _currentStrategyName = size switch
+            switch (size)
             {
-                2 => "Finned X-Wing",
-                3 => "Finned Swordfish",
-                4 => "Finned Jellyfish",
-                _ => "Finned Fish"
-            };
+                case 2: _currentStrategyName = "Finned X-Wing"; break;
+                case 3: _currentStrategyName = "Finned Swordfish"; break;
+                case 4: _currentStrategyName = "Finned Jellyfish"; break;
+                default: _currentStrategyName = "Finned Fish"; break;
+            }
 
             var solution = new SingleStepSolution(eliminations.Distinct().ToArray(), _currentStrategyName);
 
