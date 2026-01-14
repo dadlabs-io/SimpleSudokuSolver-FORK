@@ -73,5 +73,10 @@ namespace SimpleSudokuSolver
         /// Value of -1 means not set.
         /// </summary>
         public int BridgeHouseIndex { get; set; } = -1;
+
+        /// <summary>
+        /// Additional notes/metadata about the pattern (e.g. "Skyscraper", "Two-String Kite").
+        /// </summary>
+        public string Notes { get; set; } = "";
     }
 }
