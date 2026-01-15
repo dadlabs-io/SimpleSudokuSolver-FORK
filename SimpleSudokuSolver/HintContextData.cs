@@ -78,5 +78,39 @@ namespace SimpleSudokuSolver
         /// Additional notes/metadata about the pattern (e.g. "Skyscraper", "Two-String Kite").
         /// </summary>
         public string Notes { get; set; } = "";
+
+        // ===== F21: ALS Advanced Fields =====
+
+        /// <summary>
+        /// Groups of cells for each ALS in advanced ALS techniques.
+        /// AlsGroups[0] = first ALS cells, AlsGroups[1] = second ALS cells, etc.
+        /// Each inner list contains [row, col] pairs.
+        /// </summary>
+        public List<List<int[]>> AlsGroups { get; set; } = new List<List<int[]>>();
+
+        /// <summary>
+        /// Restricted Common Candidates between adjacent ALS pairs.
+        /// RccCandidates[0] = RCC between ALS 0 and ALS 1, etc.
+        /// </summary>
+        public List<int> RccCandidates { get; set; } = new List<int>();
+
+        /// <summary>
+        /// The Z candidate for elimination (common to relevant ALS).
+        /// </summary>
+        public int EliminationCandidate { get; set; } = 0;
+
+        // ===== F23: Forcing Chains Fields =====
+
+        /// <summary>
+        /// Cells in branch A path (first assumption: candidate A is true).
+        /// Each entry is [row, col].
+        /// </summary>
+        public List<int[]> BranchACells { get; set; } = new List<int[]>();
+
+        /// <summary>
+        /// Cells in branch B path (second assumption: candidate B is true).
+        /// Each entry is [row, col].
+        /// </summary>
+        public List<int[]> BranchBCells { get; set; } = new List<int[]>();
     }
 }
