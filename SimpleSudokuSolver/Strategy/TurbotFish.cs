@@ -16,11 +16,11 @@ namespace SimpleSudokuSolver.Strategy
     /// - Two-String Kite: One strong link in a row, one in a column with box connection
     /// - Generic Turbot: Any two strong links connected via a common cell
     /// 
-    /// Logic: If A-B is a strong link and B-C is a strong link, then:
-    /// - Either A=true or B=true (strong link 1)
-    /// - Either B=true or C=true (strong link 2)  
-    /// - Therefore: Either A=true or C=true (or both)
-    /// - So any cell seeing BOTH A and C cannot contain the candidate
+    /// Logic: If A-B is a strong link and B-C is a strong link, and A sees C, then:
+    /// - A and C have the same truth value (both true or both false)
+    /// - But A and C share a house, so they can't both be true
+    /// - Therefore both A and C are false, and B is true
+    /// - Any cell seeing BOTH A and C (and not B) can have the candidate eliminated
     /// </summary>
     public class TurbotFish : ISudokuSolverStrategy
     {
@@ -54,12 +54,12 @@ namespace SimpleSudokuSolver.Strategy
             // Find all nodes that have exactly 2 connections (potential endpoints of 2-link chain)
             // and iterate through looking for valid Turbot Fish patterns
             List<ColorNode> nodes = graph.Nodes.ToList();
-            
+
             // For each potential "pivot" cell B that connects two strong links
             foreach (ColorNode pivotB in nodes.Where(n => n.Neighbors.Count >= 2))
             {
                 List<ColorNode> neighbors = pivotB.Neighbors.ToList();
-                
+
                 // Try all pairs of neighbors
                 for (int i = 0; i < neighbors.Count; i++)
                 {
@@ -69,27 +69,18 @@ namespace SimpleSudokuSolver.Strategy
                         ColorNode endpointC = neighbors[j];
 
                         // A and C are the endpoints, B is the pivot
-                        // Check if A and C "see" each other (share a house)
+                        // CRITICAL: Only proceed if A and C "see" each other (share a house)
+                        // This is required for valid Turbot Fish eliminations
                         if (endpointA.Sees(endpointC.Row, endpointC.Column))
                         {
                             // Find any cell that sees BOTH A and C and has the candidate
                             List<SingleStepSolution.Candidate> eliminations = FindEliminations(
                                 puzzle, candidate, endpointA, endpointC, pivotB);
-                            
+
                             if (eliminations.Count > 0)
                             {
                                 return CreateSolution(candidate, endpointA, pivotB, endpointC, eliminations);
                             }
-                        }
-                        
-                        // Even if A and C don't see each other directly, we can still make eliminations
-                        // for any cell that sees BOTH endpoints
-                        List<SingleStepSolution.Candidate> indirectElims = FindEliminations(
-                            puzzle, candidate, endpointA, endpointC, pivotB);
-                        
-                        if (indirectElims.Count > 0)
-                        {
-                            return CreateSolution(candidate, endpointA, pivotB, endpointC, indirectElims);
                         }
                     }
                 }
@@ -112,10 +103,10 @@ namespace SimpleSudokuSolver.Strategy
                 for (int col = 0; col < 9; col++)
                 {
                     Cell cell = puzzle.Cells[row, col];
-                    
+
                     // Skip if cell doesn't have the candidate
                     if (!cell.CanBe.Contains(candidate)) continue;
-                    
+
                     // Skip if cell is part of the chain
                     if (row == endA.Row && col == endA.Column) continue;
                     if (row == pivot.Row && col == pivot.Column) continue;
@@ -147,7 +138,7 @@ namespace SimpleSudokuSolver.Strategy
             // FocusCells: the two endpoints (same parity = both true or both false together)
             solution.ContextData.FocusCells.Add(new int[] { endA.Row, endA.Column });
             solution.ContextData.FocusCells.Add(new int[] { endC.Row, endC.Column });
-            
+
             // ReasoningCells: the pivot cell
             solution.ContextData.ReasoningCells.Add(new int[] { pivot.Row, pivot.Column });
 
@@ -165,7 +156,7 @@ namespace SimpleSudokuSolver.Strategy
             // Check the orientation of the two strong links:
             // Link 1: A to Pivot
             // Link 2: Pivot to C
-            
+
             bool link1Row = endA.Row == pivot.Row;
             bool link1Col = endA.Column == pivot.Column;
             bool link2Row = pivot.Row == endC.Row;
