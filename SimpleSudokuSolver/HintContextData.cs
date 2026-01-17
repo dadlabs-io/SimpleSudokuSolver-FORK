@@ -112,5 +112,14 @@ namespace SimpleSudokuSolver
         /// Each entry is [row, col].
         /// </summary>
         public List<int[]> BranchBCells { get; set; } = new List<int[]>();
+
+        // ===== Chain Link Types (for AIC/XY-Chain visualization) =====
+
+        /// <summary>
+        /// For chain patterns: indicates whether each node arrived via strong link (true) or weak link (false).
+        /// Index 0 corresponds to FocusCells[0], etc.
+        /// First entry is typically false (start node has no incoming link).
+        /// </summary>
+        public List<bool> ChainLinkTypes { get; set; } = new List<bool>();
     }
 }

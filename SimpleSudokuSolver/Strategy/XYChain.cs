@@ -42,7 +42,7 @@ namespace SimpleSudokuSolver.Strategy
             if (bivalueCells.Count < 2) return null;
 
             // Build adjacency map: which bivalue cells can link to which
-            Dictionary<Cell, List<(Cell neighbor, int sharedCand)>> adjacency = 
+            Dictionary<Cell, List<(Cell neighbor, int sharedCand)>> adjacency =
                 new Dictionary<Cell, List<(Cell, int)>>();
 
             foreach (Cell cell in bivalueCells)
@@ -55,16 +55,15 @@ namespace SimpleSudokuSolver.Strategy
                     if (other == cell) continue;
                     if (!SolverUtility.CellsSeeEachOther(cell, other)) continue;
 
-                    // Find shared candidate
+                    // Find shared candidates - valid link requires EXACTLY ONE shared
                     List<int> otherCands = other.CanBe.ToList();
-                    foreach (int c in cands)
-                    {
-                        if (otherCands.Contains(c))
-                        {
-                            adjacency[cell].Add((other, c));
-                            break; // Only one shared candidate makes a valid link
-                        }
-                    }
+                    List<int> sharedCands = cands.Where(c => otherCands.Contains(c)).ToList();
+
+                    // Reject if cells have identical candidates (both shared) or no shared
+                    if (sharedCands.Count != 1) continue;
+
+                    int sharedCand = sharedCands[0];
+                    adjacency[cell].Add((other, sharedCand));
                 }
             }
 
@@ -77,12 +76,12 @@ namespace SimpleSudokuSolver.Strategy
                 foreach (int startCand in startCands)
                 {
                     int otherCand = startCands.First(c => c != startCand);
-                    
+
                     List<Cell> chain = new List<Cell> { startCell };
                     HashSet<Cell> visited = new HashSet<Cell> { startCell };
 
                     SingleStepSolution result = DFSFindChain(
-                        sudokuPuzzle, adjacency, chain, visited, 
+                        sudokuPuzzle, adjacency, chain, visited,
                         startCell, startCand, otherCand, bivalueCells);
 
                     if (result != null) return result;
@@ -115,7 +114,7 @@ namespace SimpleSudokuSolver.Strategy
                 Cell startCell = chain[0];
                 Cell endCell = currentCell;
 
-                List<SingleStepSolution.Candidate> eliminations = 
+                List<SingleStepSolution.Candidate> eliminations =
                     FindEliminations(puzzle, startCell, endCell, startCand);
 
                 if (eliminations.Count > 0)
@@ -142,8 +141,9 @@ namespace SimpleSudokuSolver.Strategy
                 foreach ((Cell neighbor, int sharedCand) in neighbors)
                 {
                     if (visited.Contains(neighbor)) continue;
-                    
-                    // We link via the exit candidate
+
+                    // CRITICAL: We can only link via the exit candidate
+                    // The current cell "exits" on exitCand, so neighbor must share exitCand
                     if (sharedCand != exitCand) continue;
 
                     chain.Add(neighbor);

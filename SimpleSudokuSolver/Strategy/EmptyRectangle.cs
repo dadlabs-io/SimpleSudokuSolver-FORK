@@ -1,27 +1,33 @@
 using SimpleSudokuSolver.Model;
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 
 namespace SimpleSudokuSolver.Strategy
 {
     /// <summary>
     /// Implements the Empty Rectangle technique (SE 4.4).
-    /// 
-    /// An Empty Rectangle occurs when:
-    /// 1. A candidate forms an "L-shape" within a box (2-3 cells in 2 rows and 2 columns)
-    /// 2. A conjugate pair exists in a row or column ENTIRELY OUTSIDE the box
-    /// 3. One endpoint of the conjugate pair sees into the ER box
-    /// 
-    /// The elimination occurs at a cell that sees both:
-    /// - The OTHER endpoint of the conjugate pair
-    /// - The ER's perpendicular arm (via the virtual strong link)
-    /// 
-    /// CRITICAL: The conjugate pair must be entirely outside the ER box.
-    /// If the ER hinge is part of the "pair," it is NOT a valid ER pattern.
     /// </summary>
     public class EmptyRectangle : ISudokuSolverStrategy
     {
         public string StrategyName => "Empty Rectangle";
+
+        // Debug flag - set to true to enable logging
+        private const bool DEBUG = true;
+        private const string LOG_FILE = @"C:\temp\er_debug.log";
+
+        private void Log(string message)
+        {
+            if (DEBUG)
+            {
+                try
+                {
+                    File.AppendAllText(LOG_FILE, $"{DateTime.Now:HH:mm:ss} [ER] {message}\n");
+                }
+                catch { /* ignore file errors */ }
+            }
+        }
 
         public SingleStepSolution SolveSingleStep(SudokuPuzzle sudokuPuzzle)
         {
@@ -38,7 +44,6 @@ namespace SimpleSudokuSolver.Strategy
 
         private SingleStepSolution FindEmptyRectangle(SudokuPuzzle puzzle, int candidate)
         {
-            // Check each block for an "Empty Rectangle" pattern
             for (int blockRow = 0; blockRow < 3; blockRow++)
             {
                 for (int blockCol = 0; blockCol < 3; blockCol++)
@@ -46,17 +51,18 @@ namespace SimpleSudokuSolver.Strategy
                     Block block = puzzle.Blocks[blockRow, blockCol];
                     List<Cell> cellsWithCandidate = GetCellsWithCandidate(block, candidate);
 
-                    // ER requires 2-3 cells in L-shape (not 1, not 4+)
                     if (cellsWithCandidate.Count < 2 || cellsWithCandidate.Count > 3)
                         continue;
 
-                    // Check if cells form an ER pattern (confined to 2 rows and 2 columns)
                     var rows = cellsWithCandidate.Select(c => c.RowIndex).Distinct().ToList();
                     var cols = cellsWithCandidate.Select(c => c.ColumnIndex).Distinct().ToList();
 
                     if (rows.Count != 2 || cols.Count != 2) continue;
 
-                    // Now look for external conjugate pairs that connect to this ER
+                    Log($"Found ER pattern for candidate {candidate} in Block({blockRow},{blockCol})");
+                    Log($"  ER cells: {string.Join(", ", cellsWithCandidate.Select(c => $"R{c.RowIndex + 1}C{c.ColumnIndex + 1}"))}");
+                    Log($"  erRows: [{string.Join(", ", rows)}], erCols: [{string.Join(", ", cols)}]");
+
                     SingleStepSolution solution = TryExternalRowPairs(puzzle, candidate, blockRow, blockCol, cellsWithCandidate, rows, cols);
                     if (solution != null) return solution;
 
@@ -67,19 +73,13 @@ namespace SimpleSudokuSolver.Strategy
             return null;
         }
 
-        /// <summary>
-        /// Look for conjugate pairs in rows OUTSIDE the ER box where one endpoint sees into the ER.
-        /// </summary>
         private SingleStepSolution TryExternalRowPairs(SudokuPuzzle puzzle, int candidate,
             int erBlockRow, int erBlockCol, List<Cell> erCells, List<int> erRows, List<int> erCols)
         {
-            // Check each row outside the ER block
             for (int row = 0; row < 9; row++)
             {
-                // Skip rows inside the ER block
                 if (row / 3 == erBlockRow) continue;
 
-                // Find cells with this candidate in this row
                 List<Cell> rowCells = new List<Cell>();
                 for (int col = 0; col < 9; col++)
                 {
@@ -90,70 +90,89 @@ namespace SimpleSudokuSolver.Strategy
                     }
                 }
 
-                // Must be exactly 2 cells for a conjugate pair
                 if (rowCells.Count != 2) continue;
 
                 Cell endpointA = rowCells[0];
                 Cell endpointB = rowCells[1];
 
-                // Check if one endpoint sees into the ER box (shares column with an ER cell)
-                Cell seeingEndpoint = null;
-                Cell otherEndpoint = null;
+                Log($"  Checking Row {row + 1} conjugate pair: R{endpointA.RowIndex + 1}C{endpointA.ColumnIndex + 1} - R{endpointB.RowIndex + 1}C{endpointB.ColumnIndex + 1}");
 
-                if (erCols.Contains(endpointA.ColumnIndex))
+                bool aSees = erCols.Contains(endpointA.ColumnIndex);
+                bool bSees = erCols.Contains(endpointB.ColumnIndex);
+
+                Log($"    aSees={aSees} (col {endpointA.ColumnIndex} in erCols?), bSees={bSees} (col {endpointB.ColumnIndex} in erCols?)");
+
+                if (aSees == bSees)
                 {
-                    seeingEndpoint = endpointA;
-                    otherEndpoint = endpointB;
-                }
-                else if (erCols.Contains(endpointB.ColumnIndex))
-                {
-                    seeingEndpoint = endpointB;
-                    otherEndpoint = endpointA;
-                }
-                else
-                {
-                    continue; // Neither endpoint sees the ER
+                    Log($"    SKIP: Both see or neither see");
+                    continue;
                 }
 
-                // Find the ER's "perpendicular arm" - the row within the ER that is NOT seen by seeingEndpoint
+                Cell seeingEndpoint = aSees ? endpointA : endpointB;
+                Cell otherEndpoint = aSees ? endpointB : endpointA;
+
                 int seeingCol = seeingEndpoint.ColumnIndex;
-                int erOtherRow = erRows.FirstOrDefault(r => erCells.Any(c => c.RowIndex == r && c.ColumnIndex != seeingCol));
-                
-                // If no perpendicular row found, skip
-                if (erOtherRow == 0 && !erCells.Any(c => c.RowIndex == 0 && c.ColumnIndex != seeingCol))
+                var perpCells = erCells.Where(c => c.ColumnIndex != seeingCol).ToList();
+
+                Log($"    seeingEndpoint: R{seeingEndpoint.RowIndex + 1}C{seeingEndpoint.ColumnIndex + 1}");
+                Log($"    otherEndpoint: R{otherEndpoint.RowIndex + 1}C{otherEndpoint.ColumnIndex + 1}");
+                Log($"    perpCells (col != {seeingCol}): {string.Join(", ", perpCells.Select(c => $"R{c.RowIndex + 1}C{c.ColumnIndex + 1}"))}");
+
+                if (perpCells.Count == 0)
                 {
-                    // Try the other row
-                    erOtherRow = erRows.FirstOrDefault(r => r != erRows.First());
+                    Log($"    SKIP: No perpendicular cells");
+                    continue;
                 }
 
-                // The elimination is at the intersection of:
-                // - otherEndpoint's column
-                // - erOtherRow (the perpendicular arm's row)
-                Cell elimCell = puzzle.Cells[erOtherRow, otherEndpoint.ColumnIndex];
+                int perpRow = perpCells[0].RowIndex;
 
-                if (!elimCell.CanBe.Contains(candidate)) continue;
-                if (erCells.Contains(elimCell)) continue;
-                if (elimCell == endpointA || elimCell == endpointB) continue;
+                // CRITICAL: All perpendicular cells must be in the same row
+                // Otherwise the elimination is ambiguous (7 could go in different rows)
+                if (perpCells.Any(c => c.RowIndex != perpRow))
+                {
+                    Log($"    SKIP: perpCells in multiple rows (ambiguous)");
+                    continue;
+                }
 
+                Cell elimCell = puzzle.Cells[perpRow, otherEndpoint.ColumnIndex];
+
+                Log($"    perpRow={perpRow + 1}, elimCell=R{elimCell.RowIndex + 1}C{elimCell.ColumnIndex + 1}");
+
+                if (!elimCell.CanBe.Contains(candidate))
+                {
+                    Log($"    SKIP: elimCell doesn't have candidate");
+                    continue;
+                }
+                if (erCells.Contains(elimCell))
+                {
+                    Log($"    SKIP: elimCell is an ER cell");
+                    continue;
+                }
+                if (elimCell == endpointA || elimCell == endpointB)
+                {
+                    Log($"    SKIP: elimCell is a pair endpoint");
+                    continue;
+                }
+                if (elimCell.RowIndex / 3 == erBlockRow && elimCell.ColumnIndex / 3 == erBlockCol)
+                {
+                    Log($"    SKIP: elimCell is inside ER block");
+                    continue;
+                }
+
+                Log($"    SUCCESS! Eliminating {candidate} from R{elimCell.RowIndex + 1}C{elimCell.ColumnIndex + 1}");
                 return CreateSolution(candidate, erCells, seeingEndpoint, otherEndpoint, elimCell);
             }
 
             return null;
         }
 
-        /// <summary>
-        /// Look for conjugate pairs in columns OUTSIDE the ER box where one endpoint sees into the ER.
-        /// </summary>
         private SingleStepSolution TryExternalColumnPairs(SudokuPuzzle puzzle, int candidate,
             int erBlockRow, int erBlockCol, List<Cell> erCells, List<int> erRows, List<int> erCols)
         {
-            // Check each column outside the ER block
             for (int col = 0; col < 9; col++)
             {
-                // Skip columns inside the ER block
                 if (col / 3 == erBlockCol) continue;
 
-                // Find cells with this candidate in this column
                 List<Cell> colCells = new List<Cell>();
                 for (int row = 0; row < 9; row++)
                 {
@@ -164,50 +183,77 @@ namespace SimpleSudokuSolver.Strategy
                     }
                 }
 
-                // Must be exactly 2 cells for a conjugate pair
                 if (colCells.Count != 2) continue;
 
                 Cell endpointA = colCells[0];
                 Cell endpointB = colCells[1];
 
-                // Check if one endpoint sees into the ER box (shares row with an ER cell)
-                Cell seeingEndpoint = null;
-                Cell otherEndpoint = null;
+                Log($"  Checking Col {col + 1} conjugate pair: R{endpointA.RowIndex + 1}C{endpointA.ColumnIndex + 1} - R{endpointB.RowIndex + 1}C{endpointB.ColumnIndex + 1}");
 
-                if (erRows.Contains(endpointA.RowIndex))
+                bool aSees = erRows.Contains(endpointA.RowIndex);
+                bool bSees = erRows.Contains(endpointB.RowIndex);
+
+                Log($"    aSees={aSees} (row {endpointA.RowIndex} in erRows?), bSees={bSees} (row {endpointB.RowIndex} in erRows?)");
+
+                if (aSees == bSees)
                 {
-                    seeingEndpoint = endpointA;
-                    otherEndpoint = endpointB;
-                }
-                else if (erRows.Contains(endpointB.RowIndex))
-                {
-                    seeingEndpoint = endpointB;
-                    otherEndpoint = endpointA;
-                }
-                else
-                {
-                    continue; // Neither endpoint sees the ER
+                    Log($"    SKIP: Both see or neither see");
+                    continue;
                 }
 
-                // Find the ER's "perpendicular arm" - the column within the ER that is NOT seen by seeingEndpoint
+                Cell seeingEndpoint = aSees ? endpointA : endpointB;
+                Cell otherEndpoint = aSees ? endpointB : endpointA;
+
                 int seeingRow = seeingEndpoint.RowIndex;
-                int erOtherCol = erCols.FirstOrDefault(c => erCells.Any(cell => cell.ColumnIndex == c && cell.RowIndex != seeingRow));
+                var perpCells = erCells.Where(c => c.RowIndex != seeingRow).ToList();
 
-                // If no perpendicular column found, try the other one
-                if (erOtherCol == 0 && !erCells.Any(c => c.ColumnIndex == 0 && c.RowIndex != seeingRow))
+                Log($"    seeingEndpoint: R{seeingEndpoint.RowIndex + 1}C{seeingEndpoint.ColumnIndex + 1}");
+                Log($"    otherEndpoint: R{otherEndpoint.RowIndex + 1}C{otherEndpoint.ColumnIndex + 1}");
+                Log($"    perpCells (row != {seeingRow}): {string.Join(", ", perpCells.Select(c => $"R{c.RowIndex + 1}C{c.ColumnIndex + 1}"))}");
+
+                if (perpCells.Count == 0)
                 {
-                    erOtherCol = erCols.FirstOrDefault(c => c != erCols.First());
+                    Log($"    SKIP: No perpendicular cells");
+                    continue;
                 }
 
-                // The elimination is at the intersection of:
-                // - otherEndpoint's row
-                // - erOtherCol (the perpendicular arm's column)
-                Cell elimCell = puzzle.Cells[otherEndpoint.RowIndex, erOtherCol];
 
-                if (!elimCell.CanBe.Contains(candidate)) continue;
-                if (erCells.Contains(elimCell)) continue;
-                if (elimCell == endpointA || elimCell == endpointB) continue;
+                int perpCol = perpCells[0].ColumnIndex;
 
+                // CRITICAL: All perpendicular cells must be in the same column
+                // Otherwise the elimination is ambiguous (7 could go in different columns)
+                if (perpCells.Any(c => c.ColumnIndex != perpCol))
+                {
+                    Log($"    SKIP: perpCells in multiple columns (ambiguous)");
+                    continue;
+                }
+
+                Cell elimCell = puzzle.Cells[otherEndpoint.RowIndex, perpCol];
+
+                Log($"    perpCol={perpCol + 1}, elimCell=R{elimCell.RowIndex + 1}C{elimCell.ColumnIndex + 1}");
+
+                if (!elimCell.CanBe.Contains(candidate))
+                {
+                    Log($"    SKIP: elimCell doesn't have candidate");
+                    continue;
+                }
+                if (erCells.Contains(elimCell))
+                {
+                    Log($"    SKIP: elimCell is an ER cell");
+                    continue;
+                }
+                if (elimCell == endpointA || elimCell == endpointB)
+                {
+                    Log($"    SKIP: elimCell is a pair endpoint");
+                    continue;
+                }
+                if (elimCell.RowIndex / 3 == erBlockRow && elimCell.ColumnIndex / 3 == erBlockCol)
+                {
+                    Log($"    SKIP: elimCell is inside ER block");
+                    continue;
+                }
+
+                Log($"    SUCCESS! Eliminating {candidate} from R{elimCell.RowIndex + 1}C{elimCell.ColumnIndex + 1}");
                 return CreateSolution(candidate, erCells, seeingEndpoint, otherEndpoint, elimCell);
             }
 
@@ -230,7 +276,7 @@ namespace SimpleSudokuSolver.Strategy
             return cells;
         }
 
-        private SingleStepSolution CreateSolution(int candidate, List<Cell> erCells, 
+        private SingleStepSolution CreateSolution(int candidate, List<Cell> erCells,
             Cell seeingEndpoint, Cell otherEndpoint, Cell elimCell)
         {
             var eliminations = new[] { new SingleStepSolution.Candidate(elimCell.RowIndex, elimCell.ColumnIndex, candidate) };
@@ -239,13 +285,11 @@ namespace SimpleSudokuSolver.Strategy
             solution.ContextData = new HintContextData();
             solution.ContextData.PrimaryCandidate = candidate;
 
-            // ER cells as focus
             foreach (Cell cell in erCells)
             {
                 solution.ContextData.FocusCells.Add(new int[] { cell.RowIndex, cell.ColumnIndex });
             }
 
-            // Conjugate pair endpoints as reasoning
             solution.ContextData.ReasoningCells.Add(new int[] { seeingEndpoint.RowIndex, seeingEndpoint.ColumnIndex });
             solution.ContextData.ReasoningCells.Add(new int[] { otherEndpoint.RowIndex, otherEndpoint.ColumnIndex });
 

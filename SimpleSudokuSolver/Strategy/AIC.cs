@@ -60,10 +60,10 @@ namespace SimpleSudokuSolver.Strategy
             int startCandidate)
         {
             // Chain nodes: (cell, candidate, isStrong - whether link TO this node was strong)
-            List<(Cell cell, int candidate, bool isStrongLinkIn)> chain = 
+            List<(Cell cell, int candidate, bool isStrongLinkIn)> chain =
                 new List<(Cell, int, bool)>();
-            
-            HashSet<(int row, int col, int cand)> visited = 
+
+            HashSet<(int row, int col, int cand)> visited =
                 new HashSet<(int, int, int)>();
 
             // Start with a strong link out (we'll treat the start as if we arrived via weak link)
@@ -91,12 +91,22 @@ namespace SimpleSudokuSolver.Strategy
                 int startCand = chain[0].candidate;
 
                 // For elimination: we need the chain to create a "pincer" effect
-                // If endpoints both have the same candidate and chain has odd number of strong links,
-                // cells seeing both endpoints can eliminate that candidate
+                // Both endpoints must be in TRUE state for the candidate.
+                // - Start node: arrived via weak (false) link, so it's in TRUE state for that candidate
+                // - End node: must have arrived via STRONG (true) link to be in TRUE state
+                //
+                // The last node's isStrongLinkIn tells us how it arrived.
+                // If it arrived via WEAK link, it's in FALSE state (we're saying "if this cell has candidate, then...")
+                // If it arrived via STRONG link, it's in TRUE state (we're saying "this cell must have candidate")
 
-                if (currentCandidate == startCand)
+                bool lastNodeIsTrue = chain[chain.Count - 1].isStrongLinkIn;
+
+                // Only valid for elimination if both endpoints are TRUE
+                // Start is always TRUE (we begin with "assume start has candidate")
+                // End must have arrived via strong link to also be TRUE
+                if (currentCandidate == startCand && lastNodeIsTrue)
                 {
-                    List<SingleStepSolution.Candidate> eliminations = 
+                    List<SingleStepSolution.Candidate> eliminations =
                         FindEliminations(puzzle, startCell, currentCell, startCand);
 
                     if (eliminations.Count > 0)
@@ -106,9 +116,11 @@ namespace SimpleSudokuSolver.Strategy
                         solution.ContextData = new HintContextData();
                         solution.ContextData.PrimaryCandidate = startCand;
 
-                        foreach ((Cell c, int cand, bool _) in chain)
+                        foreach ((Cell c, int cand, bool isStrongIn) in chain)
                         {
                             solution.ContextData.FocusCells.Add(new int[] { c.RowIndex, c.ColumnIndex });
+                            solution.ContextData.FocusCandidates.Add(cand);
+                            solution.ContextData.ChainLinkTypes.Add(isStrongIn);
                         }
 
                         solution.ContextData.Notes = $"AIC length: {chain.Count}";
@@ -190,7 +202,7 @@ namespace SimpleSudokuSolver.Strategy
                 foreach (int otherCand in currentCell.CanBe)
                 {
                     if (otherCand == currentCandidate) continue;
-                    
+
                     var key = (currentCell.RowIndex, currentCell.ColumnIndex, otherCand);
                     if (visited.Contains(key)) continue;
 

@@ -7,18 +7,21 @@ namespace SimpleSudokuSolver.Strategy
     /// <summary>
     /// Strategy: S-Wing (Split Wing)
     /// 
-    /// Pattern: x=x-(x=y)-y=y
-    /// - Two bivalue cells {X, Y} at endpoints
-    /// - Connected through strong links on both X and Y
+    /// Correct Pattern:
+    /// {X,Y} ─── Y ═══ {Y,Z} ─── Z ═══ {Z,X}
+    ///   A               B               C
     /// 
-    /// Chain structure:
-    /// X ═══ X ─── {X,Y} ─── Y ═══ Y
+    /// Requirements:
+    /// - A is bivalue cell {X, Y}
+    /// - B is bivalue cell {Y, Z} with strong link on Y with A
+    /// - C is bivalue cell {Z, X} with strong link on Z with B
     /// 
     /// Logic:
-    /// - Symmetric pattern where endpoints both contain X and Y
-    /// - If left X is true, right Y is false, so right X is true
-    /// - If left X is false, chain forces consistent state
-    /// - Cells seeing both endpoints can have eliminations
+    /// - If A = X → X is at A
+    /// - If A = Y → B can't be Y → B = Z → C can't be Z → C = X
+    /// - Either way, X is at A or C
+    /// 
+    /// Elimination: Remove X from cells seeing both A and C
     /// 
     /// SE Rating: 4.5
     /// </summary>
@@ -41,14 +44,18 @@ namespace SimpleSudokuSolver.Strategy
                 }
             }
 
-            // For each bivalue cell as the pivot, try to build S-Wing
-            foreach (Cell pivotCell in bivalueCells)
+            // Try each bivalue cell as A
+            foreach (Cell cellA in bivalueCells)
             {
-                List<int> candidates = pivotCell.CanBe.ToList();
-                int candX = candidates[0];
-                int candY = candidates[1];
+                List<int> candsA = cellA.CanBe.ToList();
+                int candX = candsA[0];
+                int candY = candsA[1];
 
-                SingleStepSolution result = TrySWingPattern(sudokuPuzzle, pivotCell, candX, candY);
+                // Try both orientations (X,Y) and (Y,X)
+                SingleStepSolution result = TrySWingFromA(sudokuPuzzle, bivalueCells, cellA, candX, candY);
+                if (result != null) return result;
+
+                result = TrySWingFromA(sudokuPuzzle, bivalueCells, cellA, candY, candX);
                 if (result != null) return result;
             }
 
@@ -56,77 +63,61 @@ namespace SimpleSudokuSolver.Strategy
         }
 
         /// <summary>
-        /// Pattern: startCell(X) ═══ linkCell1(X) ─── pivotCell{X,Y} ─── linkCell2(Y) ═══ endCell(Y)
+        /// Find S-Wing pattern starting from cell A with candidates {X, Y}
+        /// Looking for: A{X,Y} ─── Y ═══ B{Y,Z} ─── Z ═══ C{Z,X}
         /// </summary>
-        private SingleStepSolution TrySWingPattern(SudokuPuzzle puzzle, Cell pivotCell, int candX, int candY)
+        private SingleStepSolution TrySWingFromA(SudokuPuzzle puzzle, List<Cell> bivalueCells,
+            Cell cellA, int candX, int candY)
         {
-            // Find cells with candX that see pivot and have a strong link on X
-            List<Cell> xCellsSeeingPivot = FindCellsWithCandidate(puzzle, candX)
-                .Where(c => c != pivotCell && SolverUtility.CellsSeeEachOther(c, pivotCell))
-                .ToList();
-
-            // Find cells with candY that see pivot and have a strong link on Y
-            List<Cell> yCellsSeeingPivot = FindCellsWithCandidate(puzzle, candY)
-                .Where(c => c != pivotCell && SolverUtility.CellsSeeEachOther(c, pivotCell))
-                .ToList();
-
-            foreach (Cell linkCell1 in xCellsSeeingPivot)
+            // Find bivalue cells B that:
+            // 1. Have Y as one candidate
+            // 2. Form a strong link on Y with some house containing A
+            // 3. Are bivalue {Y, Z} where Z != X
+            foreach (Cell cellB in bivalueCells)
             {
-                // Find strong link on X from linkCell1
-                List<(Cell, int)> xStrongLinks = FindStrongLinksFromCell(puzzle, linkCell1, candX);
+                if (cellB == cellA) continue;
+                if (!cellB.CanBe.Contains(candY)) continue;
 
-                foreach ((Cell startCell, int houseIdx1) in xStrongLinks)
+                // Get B's other candidate (Z)
+                int candZ = cellB.CanBe.First(c => c != candY);
+                if (candZ == candX) continue; // Z must be different from X
+
+                // Check if A and B form a strong link on Y (only 2 Ys in their shared house)
+                if (!HasStrongLinkOnCandidate(puzzle, cellA, cellB, candY)) continue;
+
+                // Now find bivalue cell C that:
+                // 1. Is bivalue {Z, X}
+                // 2. Forms a strong link on Z with B
+                foreach (Cell cellC in bivalueCells)
                 {
-                    if (startCell == pivotCell) continue;
+                    if (cellC == cellA || cellC == cellB) continue;
+                    if (!cellC.CanBe.Contains(candZ) || !cellC.CanBe.Contains(candX)) continue;
+                    if (cellC.CanBe.Count != 2) continue; // Must be exactly {Z, X}
 
-                    foreach (Cell linkCell2 in yCellsSeeingPivot)
+                    // Check if B and C form a strong link on Z
+                    if (!HasStrongLinkOnCandidate(puzzle, cellB, cellC, candZ)) continue;
+
+                    // Found S-Wing! A{X,Y} - B{Y,Z} - C{Z,X}
+                    // Eliminate X from cells seeing both A and C
+                    List<SingleStepSolution.Candidate> eliminations =
+                        FindEliminations(puzzle, cellA, cellC, candX);
+
+                    if (eliminations.Count > 0)
                     {
-                        if (linkCell2 == linkCell1) continue;
+                        SingleStepSolution solution = new SingleStepSolution(eliminations.ToArray(), StrategyName);
 
-                        // Find strong link on Y from linkCell2
-                        List<(Cell, int)> yStrongLinks = FindStrongLinksFromCell(puzzle, linkCell2, candY);
+                        solution.ContextData = new HintContextData();
+                        solution.ContextData.PrimaryCandidate = candX;
 
-                        foreach ((Cell endCell, int houseIdx2) in yStrongLinks)
-                        {
-                            if (endCell == pivotCell || endCell == linkCell1 || endCell == startCell) continue;
+                        // Pass all 3 bivalue cells
+                        solution.ContextData.FocusCells.Add(new int[] { cellA.RowIndex, cellA.ColumnIndex });
+                        solution.ContextData.FocusCells.Add(new int[] { cellB.RowIndex, cellB.ColumnIndex });
+                        solution.ContextData.FocusCells.Add(new int[] { cellC.RowIndex, cellC.ColumnIndex });
 
-                            // Found S-Wing! Eliminate from cells seeing both startCell and endCell
-                            // The elimination candidate depends on what startCell and endCell share
-                            int elimCand = -1;
-                            if (startCell.CanBe.Contains(candY) && endCell.CanBe.Contains(candY))
-                            {
-                                elimCand = candY;
-                            }
-                            else if (startCell.CanBe.Contains(candX) && endCell.CanBe.Contains(candX))
-                            {
-                                elimCand = candX;
-                            }
+                        // Pass all 3 candidates involved
+                        solution.ContextData.FocusCandidates = new List<int> { candX, candY, candZ };
 
-                            if (elimCand > 0)
-                            {
-                                List<SingleStepSolution.Candidate> eliminations = 
-                                    FindEliminations(puzzle, startCell, endCell, elimCand);
-
-                                if (eliminations.Count > 0)
-                                {
-                                    SingleStepSolution solution = new SingleStepSolution(eliminations.ToArray(), StrategyName);
-
-                                    solution.ContextData = new HintContextData();
-                                    solution.ContextData.PrimaryCandidate = elimCand;
-
-                                    solution.ContextData.FocusCells.Add(new int[] { startCell.RowIndex, startCell.ColumnIndex });
-                                    solution.ContextData.FocusCells.Add(new int[] { linkCell1.RowIndex, linkCell1.ColumnIndex });
-                                    solution.ContextData.FocusCells.Add(new int[] { pivotCell.RowIndex, pivotCell.ColumnIndex });
-                                    solution.ContextData.FocusCells.Add(new int[] { linkCell2.RowIndex, linkCell2.ColumnIndex });
-                                    solution.ContextData.FocusCells.Add(new int[] { endCell.RowIndex, endCell.ColumnIndex });
-
-                                    solution.ContextData.FocusCandidates = new List<int> { candX, candY };
-                                    solution.ContextData.ReasoningCandidates = new List<int> { candX, candY };
-
-                                    return solution;
-                                }
-                            }
-                        }
+                        return solution;
                     }
                 }
             }
@@ -134,62 +125,40 @@ namespace SimpleSudokuSolver.Strategy
             return null;
         }
 
-        private List<Cell> FindCellsWithCandidate(SudokuPuzzle puzzle, int candidate)
+        /// <summary>
+        /// Check if two cells form a strong link on a candidate
+        /// (i.e., they are the only two cells with that candidate in a shared house)
+        /// </summary>
+        private bool HasStrongLinkOnCandidate(SudokuPuzzle puzzle, Cell cell1, Cell cell2, int candidate)
         {
-            List<Cell> cells = new List<Cell>();
-            foreach (Row row in puzzle.Rows)
-            {
-                foreach (Cell cell in row.Cells)
-                {
-                    if (cell.CanBe.Contains(candidate))
-                    {
-                        cells.Add(cell);
-                    }
-                }
-            }
-            return cells;
-        }
-
-        private List<(Cell, int)> FindStrongLinksFromCell(SudokuPuzzle puzzle, Cell fromCell, int candidate)
-        {
-            List<(Cell, int)> strongLinks = new List<(Cell, int)>();
-
             // Check row
-            List<Cell> rowCells = puzzle.Rows[fromCell.RowIndex].Cells
-                .Where(c => c.CanBe.Contains(candidate))
-                .ToList();
-            if (rowCells.Count == 2)
+            if (cell1.RowIndex == cell2.RowIndex)
             {
-                Cell other = rowCells.First(c => c != fromCell);
-                strongLinks.Add((other, fromCell.RowIndex));
+                int count = puzzle.Rows[cell1.RowIndex].Cells.Count(c => c.CanBe.Contains(candidate));
+                if (count == 2) return true;
             }
 
             // Check column
-            List<Cell> colCells = puzzle.Columns[fromCell.ColumnIndex].Cells
-                .Where(c => c.CanBe.Contains(candidate))
-                .ToList();
-            if (colCells.Count == 2)
+            if (cell1.ColumnIndex == cell2.ColumnIndex)
             {
-                Cell other = colCells.First(c => c != fromCell);
-                strongLinks.Add((other, fromCell.ColumnIndex + 9));
+                int count = puzzle.Columns[cell1.ColumnIndex].Cells.Count(c => c.CanBe.Contains(candidate));
+                if (count == 2) return true;
             }
 
             // Check box
-            int boxIndex = SolverUtility.GetBoxIndex(fromCell);
-            List<Cell> boxCells = SolverUtility.GetBoxCells(puzzle, boxIndex)
-                .Where(c => c.CanBe.Contains(candidate))
-                .ToList();
-            if (boxCells.Count == 2)
+            int box1 = SolverUtility.GetBoxIndex(cell1);
+            int box2 = SolverUtility.GetBoxIndex(cell2);
+            if (box1 == box2)
             {
-                Cell other = boxCells.First(c => c != fromCell);
-                strongLinks.Add((other, boxIndex + 18));
+                int count = SolverUtility.GetBoxCells(puzzle, box1).Count(c => c.CanBe.Contains(candidate));
+                if (count == 2) return true;
             }
 
-            return strongLinks;
+            return false;
         }
 
         private List<SingleStepSolution.Candidate> FindEliminations(
-            SudokuPuzzle puzzle, Cell startCell, Cell endCell, int elimCandidate)
+            SudokuPuzzle puzzle, Cell cellA, Cell cellC, int elimCandidate)
         {
             List<SingleStepSolution.Candidate> eliminations = new List<SingleStepSolution.Candidate>();
 
@@ -197,11 +166,11 @@ namespace SimpleSudokuSolver.Strategy
             {
                 foreach (Cell cell in row.Cells)
                 {
-                    if (cell == startCell || cell == endCell) continue;
+                    if (cell == cellA || cell == cellC) continue;
                     if (!cell.CanBe.Contains(elimCandidate)) continue;
 
-                    if (SolverUtility.CellsSeeEachOther(cell, startCell) &&
-                        SolverUtility.CellsSeeEachOther(cell, endCell))
+                    if (SolverUtility.CellsSeeEachOther(cell, cellA) &&
+                        SolverUtility.CellsSeeEachOther(cell, cellC))
                     {
                         eliminations.Add(new SingleStepSolution.Candidate(
                             cell.RowIndex, cell.ColumnIndex, elimCandidate));
