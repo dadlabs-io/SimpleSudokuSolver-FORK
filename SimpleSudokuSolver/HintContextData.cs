@@ -113,6 +113,18 @@ namespace SimpleSudokuSolver
         /// </summary>
         public List<int[]> BranchBCells { get; set; } = new List<int[]>();
 
+        /// <summary>
+        /// Full implication chain for branch A.
+        /// Each entry is [row, col, candidate, isPlacement (1=placed, 0=eliminated)].
+        /// </summary>
+        public List<int[]> BranchAChain { get; set; } = new List<int[]>();
+
+        /// <summary>
+        /// Full implication chain for branch B.
+        /// Each entry is [row, col, candidate, isPlacement (1=placed, 0=eliminated)].
+        /// </summary>
+        public List<int[]> BranchBChain { get; set; } = new List<int[]>();
+
         // ===== Chain Link Types (for AIC/XY-Chain visualization) =====
 
         /// <summary>

@@ -10,15 +10,19 @@ namespace SimpleSudokuSolver.Strategy
     /// Pattern:
     /// - Two identical bivalue cells {X, Z} (StartCell and EndCell)
     /// - These cells don't see each other directly
-    /// - A strong link on X connects them (exactly 2 occurrences of X in a house)
+    /// - A strong link on X in a bridge house connects them:
+    ///   - Link1 SEES StartCell (distinct cells, not the same!)
+    ///   - Link2 SEES EndCell (distinct cells, not the same!)
+    ///   - Link1 and Link2 form a conjugate pair on X in the bridge house
     /// 
     /// Logic:
-    /// - If StartCell is not X, it must be Z
-    /// - If EndCell is not X, it must be Z
-    /// - But the strong link means one of them MUST be X
+    /// - If Link1 = X → StartCell ≠ X → StartCell = Z (bivalue)
+    /// - If Link2 = X → EndCell ≠ X → EndCell = Z (bivalue)
+    /// - Strong link guarantees one is X, so one endpoint = Z
     /// - Therefore, cells that see BOTH StartCell and EndCell cannot be Z
     /// 
     /// Ported and adapted from Sudoku-FORK WWingStep.cs (C# 13 → C# 9)
+    /// BUG FIX Jan 2026: Link cells must SEE endpoints, not BE endpoints
     /// </summary>
     public class WWing : ISudokuSolverStrategy
     {
@@ -68,25 +72,25 @@ namespace SimpleSudokuSolver.Strategy
                         {
                             // Found W-Wing! Calculate eliminations
                             var eliminations = FindEliminations(sudokuPuzzle, startCell, endCell, zCandidate);
-                            
+
                             if (eliminations.Count > 0)
                             {
                                 var solution = new SingleStepSolution(eliminations.ToArray(), StrategyName);
-                                
+
                                 // Populate ContextData
                                 solution.ContextData = new HintContextData();
                                 solution.ContextData.PrimaryCandidate = zCandidate;
-                                
+
                                 // FocusCells: [StartCell, EndCell]
                                 solution.ContextData.FocusCells.Add(new int[] { startCell.RowIndex, startCell.ColumnIndex });
                                 solution.ContextData.FocusCells.Add(new int[] { endCell.RowIndex, endCell.ColumnIndex });
-                                
+
                                 // FocusCandidates: both candidates
                                 solution.ContextData.FocusCandidates = candidates;
-                                
+
                                 // ReasoningCandidates: [X (link candidate), Z (elimination candidate)]
                                 solution.ContextData.ReasoningCandidates = new List<int> { linkCandidate, zCandidate };
-                                
+
                                 // BridgeHouseIndex
                                 solution.ContextData.BridgeHouseIndex = bridgeResult.Value;
 
@@ -113,15 +117,16 @@ namespace SimpleSudokuSolver.Strategy
                 var cellsWithCandidate = puzzle.Rows[row].Cells
                     .Where(c => c.CanBe.Contains(candidate))
                     .ToList();
-                
+
                 if (cellsWithCandidate.Count == 2)
                 {
                     // Strong link! Check if it connects to both cells
                     var linkCell1 = cellsWithCandidate[0];
                     var linkCell2 = cellsWithCandidate[1];
-                    
-                    if ((SolverUtility.CellsSeeEachOtherOrSame(linkCell1, startCell) && SolverUtility.CellsSeeEachOtherOrSame(linkCell2, endCell)) ||
-                        (SolverUtility.CellsSeeEachOtherOrSame(linkCell1, endCell) && SolverUtility.CellsSeeEachOtherOrSame(linkCell2, startCell)))
+
+                    // CRITICAL: Link cells must SEE endpoints AND be DISTINCT from endpoints
+                    if ((SolverUtility.CellsSeeEachOtherButNotSame(linkCell1, startCell) && SolverUtility.CellsSeeEachOtherButNotSame(linkCell2, endCell)) ||
+                        (SolverUtility.CellsSeeEachOtherButNotSame(linkCell1, endCell) && SolverUtility.CellsSeeEachOtherButNotSame(linkCell2, startCell)))
                     {
                         return row; // Row index 0-8
                     }
@@ -134,14 +139,15 @@ namespace SimpleSudokuSolver.Strategy
                 var cellsWithCandidate = puzzle.Columns[col].Cells
                     .Where(c => c.CanBe.Contains(candidate))
                     .ToList();
-                
+
                 if (cellsWithCandidate.Count == 2)
                 {
                     var linkCell1 = cellsWithCandidate[0];
                     var linkCell2 = cellsWithCandidate[1];
-                    
-                    if ((SolverUtility.CellsSeeEachOtherOrSame(linkCell1, startCell) && SolverUtility.CellsSeeEachOtherOrSame(linkCell2, endCell)) ||
-                        (SolverUtility.CellsSeeEachOtherOrSame(linkCell1, endCell) && SolverUtility.CellsSeeEachOtherOrSame(linkCell2, startCell)))
+
+                    // CRITICAL: Link cells must SEE endpoints AND be DISTINCT from endpoints
+                    if ((SolverUtility.CellsSeeEachOtherButNotSame(linkCell1, startCell) && SolverUtility.CellsSeeEachOtherButNotSame(linkCell2, endCell)) ||
+                        (SolverUtility.CellsSeeEachOtherButNotSame(linkCell1, endCell) && SolverUtility.CellsSeeEachOtherButNotSame(linkCell2, startCell)))
                     {
                         return col + 9; // Column index 9-17
                     }
@@ -154,7 +160,7 @@ namespace SimpleSudokuSolver.Strategy
                 int boxRow = (box / 3) * 3;
                 int boxCol = (box % 3) * 3;
                 var cellsWithCandidate = new List<Cell>();
-                
+
                 for (int r = boxRow; r < boxRow + 3; r++)
                 {
                     for (int c = boxCol; c < boxCol + 3; c++)
@@ -166,14 +172,15 @@ namespace SimpleSudokuSolver.Strategy
                         }
                     }
                 }
-                
+
                 if (cellsWithCandidate.Count == 2)
                 {
                     var linkCell1 = cellsWithCandidate[0];
                     var linkCell2 = cellsWithCandidate[1];
-                    
-                    if ((SolverUtility.CellsSeeEachOtherOrSame(linkCell1, startCell) && SolverUtility.CellsSeeEachOtherOrSame(linkCell2, endCell)) ||
-                        (SolverUtility.CellsSeeEachOtherOrSame(linkCell1, endCell) && SolverUtility.CellsSeeEachOtherOrSame(linkCell2, startCell)))
+
+                    // CRITICAL: Link cells must SEE endpoints AND be DISTINCT from endpoints
+                    if ((SolverUtility.CellsSeeEachOtherButNotSame(linkCell1, startCell) && SolverUtility.CellsSeeEachOtherButNotSame(linkCell2, endCell)) ||
+                        (SolverUtility.CellsSeeEachOtherButNotSame(linkCell1, endCell) && SolverUtility.CellsSeeEachOtherButNotSame(linkCell2, startCell)))
                     {
                         return box + 18; // Box index 18-26
                     }
@@ -187,7 +194,7 @@ namespace SimpleSudokuSolver.Strategy
             SudokuPuzzle puzzle, Cell startCell, Cell endCell, int zCandidate)
         {
             var eliminations = new List<SingleStepSolution.Candidate>();
-            
+
             // Find cells that see BOTH startCell and endCell
             foreach (var row in puzzle.Rows)
             {
@@ -195,10 +202,10 @@ namespace SimpleSudokuSolver.Strategy
                 {
                     // Skip the W-Wing cells themselves
                     if (cell == startCell || cell == endCell) continue;
-                    
+
                     // Must have the Z candidate
                     if (!cell.CanBe.Contains(zCandidate)) continue;
-                    
+
                     // Must see both endpoints
                     if (SolverUtility.CellsSeeEachOther(cell, startCell) && SolverUtility.CellsSeeEachOther(cell, endCell))
                     {
@@ -206,7 +213,7 @@ namespace SimpleSudokuSolver.Strategy
                     }
                 }
             }
-            
+
             return eliminations;
         }
     }

@@ -11,12 +11,27 @@ namespace SimpleSudokuSolver
     {
         /// <summary>
         /// Checks if two cells can "see" each other (share row, column, or box).
+        /// Note: Returns true even if a == b (same cell sees itself via shared row)
         /// </summary>
         public static bool CellsSeeEachOther(Cell a, Cell b)
         {
             if (a.RowIndex == b.RowIndex) return true;
             if (a.ColumnIndex == b.ColumnIndex) return true;
             return GetBoxIndex(a) == GetBoxIndex(b);
+        }
+
+        /// <summary>
+        /// Checks if two cells see each other BUT are NOT the same cell.
+        /// Used for W-Wing validation where link cells must be distinct from endpoints.
+        /// </summary>
+        public static bool CellsSeeEachOtherButNotSame(Cell a, Cell b)
+        {
+            // First check: must be different cells
+            if (a.RowIndex == b.RowIndex && a.ColumnIndex == b.ColumnIndex)
+                return false; // Same cell - not valid
+            
+            // Then check if they see each other
+            return CellsSeeEachOther(a, b);
         }
 
         /// <summary>

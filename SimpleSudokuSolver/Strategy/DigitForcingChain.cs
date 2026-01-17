@@ -99,10 +99,25 @@ namespace SimpleSudokuSolver.Strategy
                                 FocusCells = new List<int[]> { new[] { forcingCell.RowIndex, forcingCell.ColumnIndex } },
                                 BranchACells = implA.Select(i => new int[] { i.Row, i.Col }).ToList(),
                                 BranchBCells = implB.Select(i => new int[] { i.Row, i.Col }).ToList(),
+                                // Full chain data: [row, col, candidate, isPlacement (1=placed, 0=eliminated)]
+                                BranchAChain = implA.Select(i => new int[] { i.Row, i.Col, i.Candidate, i.IsPlacement ? 1 : 0 }).ToList(),
+                                BranchBChain = implB.Select(i => new int[] { i.Row, i.Col, i.Candidate, i.IsPlacement ? 1 : 0 }).ToList(),
                                 PrimaryCandidate = iA.Candidate,
                                 ReasoningCandidates = new List<int> { candA, candB },
                                 Notes = $"Both paths eliminate {iA.Candidate} from R{iA.Row + 1}C{iA.Col + 1}"
                             };
+
+                            // DEBUG: Log forcing cell details
+                            string logPath = System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.Desktop), "dfc_debug.log");
+                            var logLines = new[]
+                            {
+                                $"[{System.DateTime.Now:HH:mm:ss}] DigitForcingChain Found:",
+                                $"  ForcingCell: R{forcingCell.RowIndex + 1}C{forcingCell.ColumnIndex + 1} (0-based: {forcingCell.RowIndex},{forcingCell.ColumnIndex})",
+                                $"  Candidates: [{candA}, {candB}]",
+                                $"  Elimination: R{iA.Row + 1}C{iA.Col + 1} = {iA.Candidate}",
+                                ""
+                            };
+                            System.IO.File.AppendAllLines(logPath, logLines);
 
                             return solution;
                         }
