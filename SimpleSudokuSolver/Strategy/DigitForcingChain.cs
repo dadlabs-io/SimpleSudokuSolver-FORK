@@ -108,7 +108,7 @@ namespace SimpleSudokuSolver.Strategy
                             };
 
                             // DEBUG: Log forcing cell details
-                            string logPath = System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.Desktop), "dfc_debug.log");
+                            string logPath = @"C:\github.com\sudoku-app\memory-bank\short-term\logs\dfc_debug.log";
                             var logLines = new[]
                             {
                                 $"[{System.DateTime.Now:HH:mm:ss}] DigitForcingChain Found:",

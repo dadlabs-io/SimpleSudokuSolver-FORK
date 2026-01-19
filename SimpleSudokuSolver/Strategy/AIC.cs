@@ -125,6 +125,7 @@ namespace SimpleSudokuSolver.Strategy
 
                         solution.ContextData.Notes = $"AIC length: {chain.Count}";
 
+
                         return solution;
                     }
                 }
