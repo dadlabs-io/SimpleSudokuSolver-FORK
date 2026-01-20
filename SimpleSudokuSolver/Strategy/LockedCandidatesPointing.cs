@@ -21,7 +21,7 @@ namespace SimpleSudokuSolver.Strategy
         public SingleStepSolution SolveSingleStep(SudokuPuzzle sudokuPuzzle)
         {
             // DEBUG: Log to file for tracing
-            var logPath = @"C:\github.com\sudoku-app\memory-bank\short-term\logs\sss_pointing_debug.
+            var logPath = @"C:\github.com\sudoku-app\memory-bank\short-term\logs\sss_pointing_debug.log";
             var log = new System.Text.StringBuilder();
             log.AppendLine($"\n=== LockedCandidatesPointing.SolveSingleStep @ {DateTime.Now:HH:mm:ss} ===");
 
