@@ -44,7 +44,7 @@ namespace SimpleSudokuSolver.Strategy
             foreach (var hinge in candidateCells.Where(c => c.CanBe.Count >= 3))
             {
                 var hingeCandidates = hinge.CanBe.ToList();
-                
+
                 // Find cells that see the hinge
                 var cellsSeeingHinge = candidateCells
                     .Where(c => c != hinge && SolverUtility.CellsSeeEachOther(c, hinge) && c.CanBe.Count == 2)
@@ -84,20 +84,16 @@ namespace SimpleSudokuSolver.Strategy
 
                                 if (cellsWithZ.Count < 2) continue;
 
-                                // All cells with Z must see each other for elimination to work
-                                bool allZCellsSeeEachOther = true;
-                                for (int a = 0; a < cellsWithZ.Count && allZCellsSeeEachOther; a++)
-                                {
-                                    for (int b = a + 1; b < cellsWithZ.Count && allZCellsSeeEachOther; b++)
-                                    {
-                                        if (!SolverUtility.CellsSeeEachOther(cellsWithZ[a], cellsWithZ[b]))
-                                        {
-                                            allZCellsSeeEachOther = false;
-                                        }
-                                    }
-                                }
-
-                                if (!allZCellsSeeEachOther) continue;
+                                // CRITICAL FIX: Z-cells must be confined to a SINGLE UNIT (row, col, or box)
+                                // The previous check only verified mutual visibility, which is insufficient.
+                                // Cells can "see each other" through overlapping relationships without
+                                // being in the same unit, leading to false eliminations.
+                                bool allInSameRow = cellsWithZ.Select(c => c.RowIndex).Distinct().Count() == 1;
+                                bool allInSameCol = cellsWithZ.Select(c => c.ColumnIndex).Distinct().Count() == 1;
+                                bool allInSameBox = cellsWithZ.Select(c => (c.RowIndex / 3) * 3 + (c.ColumnIndex / 3))
+                                                              .Distinct().Count() == 1;
+                                
+                                if (!allInSameRow && !allInSameCol && !allInSameBox) continue;
 
                                 // Find eliminations - cells that see ALL cells containing Z
                                 var eliminations = FindEliminations(sudokuPuzzle, cellsWithZ, zCandidate);
