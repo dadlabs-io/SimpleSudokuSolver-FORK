@@ -82,7 +82,31 @@ namespace SimpleSudokuSolver.Strategy
                                 if (wing2.CanBe.Contains(zCandidate)) cellsWithZ.Add(wing2);
                                 if (wing3.CanBe.Contains(zCandidate)) cellsWithZ.Add(wing3);
 
-                                if (cellsWithZ.Count < 2) continue;
+                                // CRITICAL FIX: Z must appear in EXACTLY 3 of the 4 cells for a valid WXYZ-Wing.
+                                // - With only 2 Z-cells: ALS constraint doesn't hold, causing false eliminations
+                                // - With all 4 Z-cells: Pattern logic breaks down (no "non-Z" wing)
+                                // Valid WXYZ-Wing: Hinge + 2 wings have Z, 1 wing does NOT have Z.
+                                // Mentor review confirmed this correction.
+                                if (cellsWithZ.Count != 3) continue;
+
+                                // DEBUG: Log the pattern being evaluated
+                                var logPath = System.IO.Path.Combine(
+                                    System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
+                                    "github.com", "sudoku-app", "memory-bank", "short-term", "logs", "sss_wxyzwing_debug.log");
+                                try
+                                {
+                                    System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(logPath));
+                                    System.IO.File.AppendAllText(logPath,
+                                        $"\n[{System.DateTime.Now:HH:mm:ss.fff}] ========== WXYZ-Wing Pattern Evaluation ==========\n" +
+                                        $"  Hinge: R{hinge.RowIndex + 1}C{hinge.ColumnIndex + 1} candidates={{{string.Join(",", hinge.CanBe)}}}\n" +
+                                        $"  Wing1: R{wing1.RowIndex + 1}C{wing1.ColumnIndex + 1} candidates={{{string.Join(",", wing1.CanBe)}}}\n" +
+                                        $"  Wing2: R{wing2.RowIndex + 1}C{wing2.ColumnIndex + 1} candidates={{{string.Join(",", wing2.CanBe)}}}\n" +
+                                        $"  Wing3: R{wing3.RowIndex + 1}C{wing3.ColumnIndex + 1} candidates={{{string.Join(",", wing3.CanBe)}}}\n" +
+                                        $"  All 4 candidates: {{{string.Join(",", allCandidates)}}}\n" +
+                                        $"  Testing Z={zCandidate}\n" +
+                                        $"  Cells with Z: [{string.Join(", ", cellsWithZ.Select(c => $"R{c.RowIndex + 1}C{c.ColumnIndex + 1}"))}]\n");
+                                }
+                                catch { /* Ignore logging errors */ }
 
                                 // CRITICAL FIX: Z-cells must be confined to a SINGLE UNIT (row, col, or box)
                                 // The previous check only verified mutual visibility, which is insufficient.
@@ -92,11 +116,36 @@ namespace SimpleSudokuSolver.Strategy
                                 bool allInSameCol = cellsWithZ.Select(c => c.ColumnIndex).Distinct().Count() == 1;
                                 bool allInSameBox = cellsWithZ.Select(c => (c.RowIndex / 3) * 3 + (c.ColumnIndex / 3))
                                                               .Distinct().Count() == 1;
-                                
-                                if (!allInSameRow && !allInSameCol && !allInSameBox) continue;
+
+                                // DEBUG: Log unit confinement check
+                                try
+                                {
+                                    System.IO.File.AppendAllText(logPath,
+                                        $"  Unit check: SameRow={allInSameRow}, SameCol={allInSameCol}, SameBox={allInSameBox}\n" +
+                                        $"  Rows: [{string.Join(",", cellsWithZ.Select(c => c.RowIndex + 1))}]\n" +
+                                        $"  Cols: [{string.Join(",", cellsWithZ.Select(c => c.ColumnIndex + 1))}]\n" +
+                                        $"  Boxes: [{string.Join(",", cellsWithZ.Select(c => (c.RowIndex / 3) * 3 + (c.ColumnIndex / 3) + 1))}]\n");
+                                }
+                                catch { /* Ignore logging errors */ }
+
+                                if (!allInSameRow && !allInSameCol && !allInSameBox)
+                                {
+                                    try { System.IO.File.AppendAllText(logPath, $"  => REJECTED: Z-cells not in same unit\n"); }
+                                    catch { }
+                                    continue;
+                                }
 
                                 // Find eliminations - cells that see ALL cells containing Z
                                 var eliminations = FindEliminations(sudokuPuzzle, cellsWithZ, zCandidate);
+
+                                // DEBUG: Log eliminations found
+                                try
+                                {
+                                    System.IO.File.AppendAllText(logPath,
+                                        $"  => PASSED unit check. Found {eliminations.Count} eliminations:\n" +
+                                        string.Join("\n", eliminations.Select(e => $"     - R{e.IndexOfRow + 1}C{e.IndexOfColumn + 1} remove {e.Value}")) + "\n");
+                                }
+                                catch { /* Ignore logging errors */ }
 
                                 if (eliminations.Count > 0)
                                 {
