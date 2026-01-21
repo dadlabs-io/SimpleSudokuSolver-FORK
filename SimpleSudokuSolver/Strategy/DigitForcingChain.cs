@@ -107,18 +107,6 @@ namespace SimpleSudokuSolver.Strategy
                                 Notes = $"Both paths eliminate {iA.Candidate} from R{iA.Row + 1}C{iA.Col + 1}"
                             };
 
-                            // DEBUG: Log forcing cell details
-                            string logPath = @"C:\github.com\sudoku-app\memory-bank\short-term\logs\dfc_debug.log";
-                            var logLines = new[]
-                            {
-                                $"[{System.DateTime.Now:HH:mm:ss}] DigitForcingChain Found:",
-                                $"  ForcingCell: R{forcingCell.RowIndex + 1}C{forcingCell.ColumnIndex + 1} (0-based: {forcingCell.RowIndex},{forcingCell.ColumnIndex})",
-                                $"  Candidates: [{candA}, {candB}]",
-                                $"  Elimination: R{iA.Row + 1}C{iA.Col + 1} = {iA.Candidate}",
-                                ""
-                            };
-                            System.IO.File.AppendAllLines(logPath, logLines);
-
                             return solution;
                         }
                     }

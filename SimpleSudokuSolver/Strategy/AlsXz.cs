@@ -13,7 +13,6 @@ namespace SimpleSudokuSolver.Strategy
         {
             // 1. Find all ALS in the puzzle
             var allAls = AlmostLockedSet.FindAll(sudokuPuzzle);
-            System.Diagnostics.Debug.WriteLine($"[ALS-XZ] Found {allAls.Count} total ALS in puzzle");
 
             // 2. Iterate all unique pairs
             for (int i = 0; i < allAls.Count; i++)
@@ -56,38 +55,6 @@ namespace SimpleSudokuSolver.Strategy
 
                                 if (eliminations.Count > 0)
                                 {
-                                    // === EXTENSIVE DEBUG LOGGING ===
-                                    string als1Cells = string.Join(", ", als1.Cells.Select(c => $"R{c.RowIndex + 1}C{c.ColumnIndex + 1}"));
-                                    string als2Cells = string.Join(", ", als2.Cells.Select(c => $"R{c.RowIndex + 1}C{c.ColumnIndex + 1}"));
-                                    string als1Cands = string.Join(",", als1.Candidates);
-                                    string als2Cands = string.Join(",", als2.Candidates);
-
-                                    // Per-cell candidates
-                                    string als1CellDetails = string.Join(", ", als1.Cells.Select(c =>
-                                        $"R{c.RowIndex + 1}C{c.ColumnIndex + 1}[{string.Join(",", c.CanBe)}]"));
-                                    string als2CellDetails = string.Join(", ", als2.Cells.Select(c =>
-                                        $"R{c.RowIndex + 1}C{c.ColumnIndex + 1}[{string.Join(",", c.CanBe)}]"));
-
-                                    // Z-cells in each set
-                                    var zCells1 = als1.Cells.Where(c => c.CanBe.Contains(z)).ToList();
-                                    var zCells2 = als2.Cells.Where(c => c.CanBe.Contains(z)).ToList();
-                                    string zCells1Str = string.Join(", ", zCells1.Select(c => $"R{c.RowIndex + 1}C{c.ColumnIndex + 1}"));
-                                    string zCells2Str = string.Join(", ", zCells2.Select(c => $"R{c.RowIndex + 1}C{c.ColumnIndex + 1}"));
-
-                                    string elimStr = string.Join(", ", eliminations.Select(e => $"R{e.IndexOfRow + 1}C{e.IndexOfColumn + 1}"));
-
-                                    System.Diagnostics.Debug.WriteLine($"[ALS-XZ] ========== SOLUTION FOUND ==========");
-                                    System.Diagnostics.Debug.WriteLine($"[ALS-XZ] Set A: Cells=[{als1Cells}], Candidates=[{als1Cands}]");
-                                    System.Diagnostics.Debug.WriteLine($"[ALS-XZ] Set A Details: {als1CellDetails}");
-                                    System.Diagnostics.Debug.WriteLine($"[ALS-XZ] Set B: Cells=[{als2Cells}], Candidates=[{als2Cands}]");
-                                    System.Diagnostics.Debug.WriteLine($"[ALS-XZ] Set B Details: {als2CellDetails}");
-                                    System.Diagnostics.Debug.WriteLine($"[ALS-XZ] RCC (X) = {x}, SharedHouse = {sharedHouseIndex}");
-                                    System.Diagnostics.Debug.WriteLine($"[ALS-XZ] Z = {z}");
-                                    System.Diagnostics.Debug.WriteLine($"[ALS-XZ] Z-cells in Set A: [{zCells1Str}]");
-                                    System.Diagnostics.Debug.WriteLine($"[ALS-XZ] Z-cells in Set B: [{zCells2Str}]");
-                                    System.Diagnostics.Debug.WriteLine($"[ALS-XZ] Eliminations: [{elimStr}] (removing {z})");
-                                    System.Diagnostics.Debug.WriteLine($"[ALS-XZ] =====================================");
-
                                     // Found a solution!
                                     var solution = new SingleStepSolution(eliminations.ToArray(), StrategyName);
                                     solution.ContextData = new HintContextData

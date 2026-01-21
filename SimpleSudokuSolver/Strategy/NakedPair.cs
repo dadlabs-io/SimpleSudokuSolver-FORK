@@ -52,7 +52,8 @@ namespace SimpleSudokuSolver.Strategy
                 {
                     Cell second = nakedPairCandidates[j];
 
-                    if (first.CanBe.SequenceEqual(second.CanBe))
+                    // Use set equality (order-independent) instead of SequenceEqual
+                    if (new HashSet<int>(first.CanBe).SetEquals(second.CanBe))
                     {
                         // Found a valid Naked Pair - collect eliminations from ALL shared houses
                         var eliminations = GetAllEliminationsForNakedSet(
@@ -64,10 +65,10 @@ namespace SimpleSudokuSolver.Strategy
                             solution.ContextData = new HintContextData
                             {
                                 FocusCells = new List<int[]>
-                {
-                  new int[] { first.RowIndex, first.ColumnIndex },
-                  new int[] { second.RowIndex, second.ColumnIndex }
-                }
+                                {
+                                new int[] { first.RowIndex, first.ColumnIndex },
+                                new int[] { second.RowIndex, second.ColumnIndex }
+                                }
                             };
                             return solution;
                         }
