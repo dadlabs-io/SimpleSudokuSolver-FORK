@@ -80,9 +80,11 @@ namespace SimpleSudokuSolver.Strategy
                     List<Cell> chain = new List<Cell> { startCell };
                     HashSet<Cell> visited = new HashSet<Cell> { startCell };
 
+                    // startCand is our entry candidate, so we pass it as currentCand
+                    // The DFS will compute exitCand = other candidate = the linking candidate
                     SingleStepSolution result = DFSFindChain(
                         sudokuPuzzle, adjacency, chain, visited,
-                        startCell, startCand, otherCand, bivalueCells);
+                        startCell, startCand, startCand, bivalueCells);
 
                     if (result != null) return result;
                 }
@@ -114,11 +116,52 @@ namespace SimpleSudokuSolver.Strategy
                 Cell startCell = chain[0];
                 Cell endCell = currentCell;
 
-                List<SingleStepSolution.Candidate> eliminations =
-                    FindEliminations(puzzle, startCell, endCell, startCand);
+                // Standard XY-Chain: eliminate from cells seeing both endpoints
+                // (Nice Loop logic was too complex and error-prone, disabled)
+                List<SingleStepSolution.Candidate> eliminations = FindEliminations(puzzle, chain, startCand);
 
                 if (eliminations.Count > 0)
                 {
+                    // DEBUG: Log the complete XY-Chain pattern for verification
+                    if (Model.SudokuPuzzle.EnableVerboseFileLogging)
+                    {
+                        string logPath = @"c:\github.com\sudoku-app\memory-bank\short-term\logs\xychain-debug.log";
+                        var logLines = new List<string>();
+                        logLines.Add($"[{System.DateTime.Now:HH:mm:ss}] [XY-Chain] Found pattern:");
+                        logLines.Add($"  Start candidate: {startCand}");
+                        logLines.Add($"  Chain length: {chain.Count}");
+                        logLines.Add($"  Chain:");
+                        for (int i = 0; i < chain.Count; i++)
+                        {
+                            var c = chain[i];
+                            logLines.Add($"    [{i}] R{c.RowIndex + 1}C{c.ColumnIndex + 1} candidates=[{string.Join(",", c.CanBe)}]");
+                        }
+                        logLines.Add($"  Conclusion: Standard XY-Chain - eliminate {startCand} from cells seeing both endpoints");
+                        foreach (var elim in eliminations)
+                        {
+                            logLines.Add($"  ELIMINATION: {elim.Value} from R{elim.IndexOfRow + 1}C{elim.IndexOfColumn + 1}");
+                        }
+
+                        // Dump full board state
+                        logLines.Add($"[XY-Chain] BOARD STATE:");
+                        for (int row = 0; row < 9; row++)
+                        {
+                            var rowCells = puzzle.Rows[row].Cells;
+                            var line = $"  R{row + 1}: ";
+                            for (int col = 0; col < 9; col++)
+                            {
+                                var cell = rowCells[col];
+                                if (cell.HasValue)
+                                    line += $"[{cell.Value}] ";
+                                else
+                                    line += $"({string.Join("", cell.CanBe)}) ";
+                            }
+                            logLines.Add(line);
+                        }
+                        logLines.Add("");
+                        System.IO.File.AppendAllLines(logPath, logLines);
+                    }
+
                     SingleStepSolution solution = new SingleStepSolution(eliminations.ToArray(), StrategyName);
 
                     solution.ContextData = new HintContextData();
@@ -166,15 +209,23 @@ namespace SimpleSudokuSolver.Strategy
         }
 
         private List<SingleStepSolution.Candidate> FindEliminations(
-            SudokuPuzzle puzzle, Cell startCell, Cell endCell, int elimCandidate)
+            SudokuPuzzle puzzle, List<Cell> chain, int elimCandidate)
         {
             List<SingleStepSolution.Candidate> eliminations = new List<SingleStepSolution.Candidate>();
+
+            // Get start and end cells for visibility checks
+            Cell startCell = chain[0];
+            Cell endCell = chain[chain.Count - 1];
+
+            // Create HashSet for O(1) chain membership lookup
+            HashSet<Cell> chainCells = new HashSet<Cell>(chain);
 
             foreach (Row row in puzzle.Rows)
             {
                 foreach (Cell cell in row.Cells)
                 {
-                    if (cell == startCell || cell == endCell) continue;
+                    // Skip ANY cell that is part of the chain (not just start/end)
+                    if (chainCells.Contains(cell)) continue;
                     if (!cell.CanBe.Contains(elimCandidate)) continue;
 
                     if (SolverUtility.CellsSeeEachOther(cell, startCell) &&
@@ -187,6 +238,75 @@ namespace SimpleSudokuSolver.Strategy
             }
 
             return eliminations;
+        }
+
+        /// <summary>
+        /// Validates the reverse direction of the chain.
+        /// If end=startCand, trace backwards through the chain.
+        /// Returns true if this leads to start=startCand (consistent, standard XY-Chain).
+        /// Returns false if it leads to start≠startCand (contradiction, Nice Loop).
+        /// </summary>
+        private bool ValidateReverseChain(List<Cell> chain, int startCand)
+        {
+            // Trace backwards: assume end cell = startCand
+            // For each step, entering on one candidate means exiting on the other
+            // The weak link between cells means if one cell IS candidate X, neighboring cell is NOT X
+
+            // Starting from end cell, we're "entering" on startCand (assumption)
+            int currentCand = startCand;
+
+            // Go backwards through the chain
+            for (int i = chain.Count - 1; i > 0; i--)
+            {
+                Cell currentCell = chain[i];
+                Cell prevCell = chain[i - 1];
+
+                // Current cell is "active" on currentCand (either true or we're assuming it)
+                // We need to find what candidate links to prevCell
+
+                List<int> currCands = currentCell.CanBe.ToList();
+                int otherCandInCell = currCands.First(c => c != currentCand);
+
+                // The link to prevCell is via some shared candidate
+                // In reverse, if currentCell = currentCand, then via weak link on otherCandInCell,
+                // prevCell ≠ otherCandInCell. Since prevCell is bivalue, prevCell = the other candidate.
+
+                // Find the shared candidate between currentCell and prevCell
+                List<int> prevCands = prevCell.CanBe.ToList();
+                List<int> shared = currCands.Where(c => prevCands.Contains(c)).ToList();
+
+                if (shared.Count != 1)
+                {
+                    // This shouldn't happen if chain was built correctly
+                    return false;
+                }
+
+                int sharedCand = shared[0];
+
+                // The chain link is on sharedCand
+                // XY-Chain: we ENTER on currentCand, EXIT on otherCandInCell
+                // The link to prevCell should be on the EXIT candidate (otherCandInCell)
+
+                if (sharedCand == otherCandInCell)
+                {
+                    // Link is on the exit candidate - this is correct
+                    // Weak link: currentCell exits otherCandInCell → prevCell ≠ otherCandInCell
+                    // prevCell is bivalue, so prevCell = its OTHER candidate
+                    int prevOther = prevCands.First(c => c != sharedCand);
+                    currentCand = prevOther;
+                }
+                else
+                {
+                    // Link is on the entry candidate (currentCand), not the exit
+                    // This means the chain was built differently - can't validate in reverse
+                    return false;
+                }
+            }
+
+            // After tracing backwards, currentCand is what the start cell should be
+            // If currentCand == startCand, reverse is consistent with forward
+            // If currentCand != startCand, reverse contradicts forward (Nice Loop)
+            return currentCand == startCand;
         }
     }
 }

@@ -52,42 +52,27 @@ namespace SimpleSudokuSolver.Strategy
                     Cell cellB = bivalueCells[i];
                     Cell cellC = bivalueCells[j];
 
-                    // Cells b and c must have a STRONG link on their shared candidate
-                    // (not just see each other - the canonical L-Wing requires strong link on Y)
-
-                    // Find shared candidate Y
+                    // Find shared and unique candidates using set operations
                     List<int> candsB = cellB.CanBe.ToList();
                     List<int> candsC = cellC.CanBe.ToList();
 
-                    int sharedY = -1;
-                    int candX = -1; // unique to cell B
-                    int candZ = -1; // unique to cell C
+                    // Use proper set operations for correct extraction
+                    var intersection = candsB.Intersect(candsC).ToList();
+                    if (intersection.Count != 1) continue;  // Must share exactly one candidate
+                    int sharedY = intersection[0];
 
-                    foreach (int c in candsB)
-                    {
-                        if (candsC.Contains(c))
-                        {
-                            sharedY = c;
-                        }
-                        else
-                        {
-                            candX = c;
-                        }
-                    }
-                    foreach (int c in candsC)
-                    {
-                        if (!candsB.Contains(c))
-                        {
-                            candZ = c;
-                        }
-                    }
+                    var uniqueB = candsB.Except(candsC).ToList();
+                    var uniqueC = candsC.Except(candsB).ToList();
+                    if (uniqueB.Count != 1 || uniqueC.Count != 1) continue;
+                    int candX = uniqueB[0];
+                    int candZ = uniqueC[0];
 
-                    // L-Wing needs exactly one shared candidate and two different unique candidates
-                    if (sharedY < 0 || candX < 0 || candZ < 0) continue;
+                    // L-Wing needs two different unique candidates (X ≠ Z)
                     if (candX == candZ) continue; // Would be W-Wing pattern, not L-Wing
 
-                    // CRITICAL: Cells B and C must have STRONG link on sharedY
-                    // The canonical L-Wing pattern x=(x-y)=(y-z)=z requires strong link on Y
+                    // Cells B and C must have a STRONG link on sharedY
+                    // The canonical L-Wing pattern x=(x-y)=(y-z)=z uses strong links throughout
+                    // The '=' symbol means strong link, '-' inside parentheses is just bivalue notation
                     if (!HasStrongLinkOnCandidate(sudokuPuzzle, cellB, cellC, sharedY)) continue;
 
                     // Try to find strong link endpoints
@@ -129,21 +114,64 @@ namespace SimpleSudokuSolver.Strategy
 
                     List<SingleStepSolution.Candidate> eliminations = new List<SingleStepSolution.Candidate>();
 
-                    // Cross-eliminate: Z from cellA (if cellA has Z)
-                    if (cellA.CanBe.Contains(candZ))
+                    // Eliminations only valid if cellA and cellD see each other (share a unit)
+                    // L-Wing conclusion: a=X OR d=Z
+                    // If they see each other, cells seeing both endpoints can have eliminations
+                    if (SolverUtility.CellsSeeEachOther(cellA, cellD))
                     {
-                        eliminations.Add(new SingleStepSolution.Candidate(
-                            cellA.RowIndex, cellA.ColumnIndex, candZ));
-                    }
-                    // Cross-eliminate: X from cellD (if cellD has X)
-                    if (cellD.CanBe.Contains(candX))
-                    {
-                        eliminations.Add(new SingleStepSolution.Candidate(
-                            cellD.RowIndex, cellD.ColumnIndex, candX));
+                        // Cross-eliminate: Z from cellA (if cellA has Z)
+                        if (cellA.CanBe.Contains(candZ))
+                        {
+                            eliminations.Add(new SingleStepSolution.Candidate(
+                                cellA.RowIndex, cellA.ColumnIndex, candZ));
+                        }
+                        // Cross-eliminate: X from cellD (if cellD has X)
+                        if (cellD.CanBe.Contains(candX))
+                        {
+                            eliminations.Add(new SingleStepSolution.Candidate(
+                                cellD.RowIndex, cellD.ColumnIndex, candX));
+                        }
                     }
 
                     if (eliminations.Count > 0)
                     {
+                        // DEBUG: Log the complete L-Wing pattern for verification
+                        if (Model.SudokuPuzzle.EnableVerboseFileLogging)
+                        {
+                            string logPath = @"c:\github.com\sudoku-app\memory-bank\short-term\logs\lwing-debug.log";
+                            var logLines = new List<string>();
+                            logLines.Add($"[{System.DateTime.Now:HH:mm:ss}] [L-Wing] Found pattern:");
+                            logLines.Add($"  Cell a: R{cellA.RowIndex + 1}C{cellA.ColumnIndex + 1} candidates=[{string.Join(",", cellA.CanBe)}]");
+                            logLines.Add($"  Cell b: R{cellB.RowIndex + 1}C{cellB.ColumnIndex + 1} candidates=[{string.Join(",", cellB.CanBe)}] (bivalue {{X={candX}, Y={sharedY}}})");
+                            logLines.Add($"  Cell c: R{cellC.RowIndex + 1}C{cellC.ColumnIndex + 1} candidates=[{string.Join(",", cellC.CanBe)}] (bivalue {{Y={sharedY}, Z={candZ}}})");
+                            logLines.Add($"  Cell d: R{cellD.RowIndex + 1}C{cellD.ColumnIndex + 1} candidates=[{string.Join(",", cellD.CanBe)}]");
+                            logLines.Add($"  Chain: {candX}=({{X={candX},Y={sharedY}}})=({{Y={sharedY},Z={candZ}}})={candZ}");
+                            logLines.Add($"  Conclusion: a=X({candX}) OR d=Z({candZ})");
+                            foreach (var elim in eliminations)
+                            {
+                                logLines.Add($"  ELIMINATION: {elim.Value} from R{elim.IndexOfRow + 1}C{elim.IndexOfColumn + 1}");
+                            }
+
+                            // Dump full board state
+                            logLines.Add($"[L-Wing] BOARD STATE:");
+                            for (int row = 0; row < 9; row++)
+                            {
+                                var rowCells = puzzle.Rows[row].Cells;
+                                var line = $"  R{row + 1}: ";
+                                for (int col = 0; col < 9; col++)
+                                {
+                                    var cell = rowCells[col];
+                                    if (cell.HasValue)
+                                        line += $"[{cell.Value}] ";
+                                    else
+                                        line += $"({string.Join("", cell.CanBe)}) ";
+                                }
+                                logLines.Add(line);
+                            }
+                            logLines.Add("");
+                            System.IO.File.AppendAllLines(logPath, logLines);
+                        }
+
                         SingleStepSolution solution = new SingleStepSolution(eliminations.ToArray(), StrategyName);
 
                         solution.ContextData = new HintContextData();

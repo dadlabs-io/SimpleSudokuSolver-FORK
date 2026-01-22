@@ -20,10 +20,14 @@ namespace SimpleSudokuSolver.Strategy
 
         public SingleStepSolution SolveSingleStep(SudokuPuzzle sudokuPuzzle)
         {
-            // DEBUG: Log to file for tracing
+            // DEBUG: Log to file for tracing (controlled by EnableVerboseFileLogging)
             var logPath = @"C:\github.com\sudoku-app\memory-bank\short-term\logs\sss_pointing_debug.log";
-            var log = new System.Text.StringBuilder();
-            log.AppendLine($"\n=== LockedCandidatesPointing.SolveSingleStep @ {DateTime.Now:HH:mm:ss} ===");
+            System.Text.StringBuilder log = null;
+            if (Model.SudokuPuzzle.EnableVerboseFileLogging)
+            {
+                log = new System.Text.StringBuilder();
+                log.AppendLine($"\n=== LockedCandidatesPointing.SolveSingleStep @ {DateTime.Now:HH:mm:ss} ===");
+            }
 
             var eliminations = new List<SingleStepSolution.Candidate>();
 
@@ -51,7 +55,7 @@ namespace SimpleSudokuSolver.Strategy
 
                         if (cell.CanBe.Contains(cellValue))
                         {
-                            log.AppendLine($"  Block[{block.BlockRowIndex},{block.BlockColumnIndex}] Row pattern: Eliminate {cellValue} from R{cell.RowIndex + 1}C{cell.ColumnIndex + 1}");
+                            log?.AppendLine($"  Block[{block.BlockRowIndex},{block.BlockColumnIndex}] Row pattern: Eliminate {cellValue} from R{cell.RowIndex + 1}C{cell.ColumnIndex + 1}");
                             eliminations.Add(new SingleStepSolution.Candidate(cell.RowIndex, cell.ColumnIndex, cellValue));
                         }
                     }
@@ -68,23 +72,26 @@ namespace SimpleSudokuSolver.Strategy
 
                         if (cell.CanBe.Contains(cellValue))
                         {
-                            log.AppendLine($"  Block[{block.BlockRowIndex},{block.BlockColumnIndex}] Col pattern: Eliminate {cellValue} from R{cell.RowIndex + 1}C{cell.ColumnIndex + 1}");
+                            log?.AppendLine($"  Block[{block.BlockRowIndex},{block.BlockColumnIndex}] Col pattern: Eliminate {cellValue} from R{cell.RowIndex + 1}C{cell.ColumnIndex + 1}");
                             eliminations.Add(new SingleStepSolution.Candidate(cell.RowIndex, cell.ColumnIndex, cellValue));
                         }
                     }
                 }
             }
 
-            log.AppendLine($"\n  Total eliminations: {eliminations.Count}");
+            log?.AppendLine($"\n  Total eliminations: {eliminations.Count}");
             if (eliminations.Count > 0)
             {
-                log.AppendLine($"  RETURNING {eliminations.Distinct().Count()} eliminations");
+                log?.AppendLine($"  RETURNING {eliminations.Distinct().Count()} eliminations");
             }
             else
             {
-                log.AppendLine("  Returning null");
+                log?.AppendLine("  Returning null");
             }
-            System.IO.File.AppendAllText(logPath, log.ToString());
+            if (Model.SudokuPuzzle.EnableVerboseFileLogging && log != null)
+            {
+                System.IO.File.AppendAllText(logPath, log.ToString());
+            }
 
             return eliminations.Count > 0 ?
               new SingleStepSolution(eliminations.Distinct().ToArray(), StrategyName) :

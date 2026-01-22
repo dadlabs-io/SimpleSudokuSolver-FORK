@@ -19,10 +19,14 @@ namespace SimpleSudokuSolver.Strategy
 
         public SingleStepSolution SolveSingleStep(SudokuPuzzle sudokuPuzzle)
         {
-            // DEBUG: Log to file for tracing
+            // DEBUG: Log to file for tracing (controlled by EnableVerboseFileLogging)
             var logPath = @"C:\github.com\sudoku-app\memory-bank\short-term\logs\sss_claiming_debug.log";
-            var log = new System.Text.StringBuilder();
-            log.AppendLine($"\n=== LockedCandidatesClaiming.SolveSingleStep @ {DateTime.Now:HH:mm:ss} ===");
+            System.Text.StringBuilder log = null;
+            if (Model.SudokuPuzzle.EnableVerboseFileLogging)
+            {
+                log = new System.Text.StringBuilder();
+                log.AppendLine($"\n=== LockedCandidatesClaiming.SolveSingleStep @ {DateTime.Now:HH:mm:ss} ===");
+            }
 
             var cellCandidatePairsPerRow = new List<Tuple<Cell, int>>();
             var cellCandidatePairsPerColumn = new List<Tuple<Cell, int>>();
@@ -32,10 +36,10 @@ namespace SimpleSudokuSolver.Strategy
                 var pairs = GetCellCandidatePairsWhichAppearOnlyInSingleBlock(row.Cells, x => x.ColumnIndex).ToList();
                 if (pairs.Count > 0)
                 {
-                    log.AppendLine($"  Row {row.Cells[0].RowIndex} (0-based): Found {pairs.Count} locked patterns");
+                    log?.AppendLine($"  Row {row.Cells[0].RowIndex} (0-based): Found {pairs.Count} locked patterns");
                     foreach (var p in pairs)
                     {
-                        log.AppendLine($"    - Candidate {p.Item2} locked in cell R{p.Item1.RowIndex + 1}C{p.Item1.ColumnIndex + 1} (1-based)");
+                        log?.AppendLine($"    - Candidate {p.Item2} locked in cell R{p.Item1.RowIndex + 1}C{p.Item1.ColumnIndex + 1} (1-based)");
                     }
                 }
                 cellCandidatePairsPerRow.AddRange(pairs);
@@ -46,49 +50,52 @@ namespace SimpleSudokuSolver.Strategy
                 var pairs = GetCellCandidatePairsWhichAppearOnlyInSingleBlock(column.Cells, x => x.RowIndex).ToList();
                 if (pairs.Count > 0)
                 {
-                    log.AppendLine($"  Column {column.Cells[0].ColumnIndex} (0-based): Found {pairs.Count} locked patterns");
+                    log?.AppendLine($"  Column {column.Cells[0].ColumnIndex} (0-based): Found {pairs.Count} locked patterns");
                     foreach (var p in pairs)
                     {
-                        log.AppendLine($"    - Candidate {p.Item2} locked in cell R{p.Item1.RowIndex + 1}C{p.Item1.ColumnIndex + 1} (1-based)");
+                        log?.AppendLine($"    - Candidate {p.Item2} locked in cell R{p.Item1.RowIndex + 1}C{p.Item1.ColumnIndex + 1} (1-based)");
                     }
                 }
                 cellCandidatePairsPerColumn.AddRange(pairs);
             }
 
             // Try row-based patterns first
-            log.AppendLine($"\n  Computing ROW-based eliminations from {cellCandidatePairsPerRow.Count} patterns...");
+            log?.AppendLine($"\n  Computing ROW-based eliminations from {cellCandidatePairsPerRow.Count} patterns...");
             var rowEliminations = GetEliminations(cellCandidatePairsPerRow, true, sudokuPuzzle).ToList();
-            log.AppendLine($"  -> Found {rowEliminations.Count} row-based eliminations:");
+            log?.AppendLine($"  -> Found {rowEliminations.Count} row-based eliminations:");
             foreach (var e in rowEliminations)
             {
-                log.AppendLine($"      Eliminate {e.Value} from R{e.IndexOfRow + 1}C{e.IndexOfColumn + 1} (1-based) [raw: row={e.IndexOfRow}, col={e.IndexOfColumn} 0-based]");
+                log?.AppendLine($"      Eliminate {e.Value} from R{e.IndexOfRow + 1}C{e.IndexOfColumn + 1} (1-based) [raw: row={e.IndexOfRow}, col={e.IndexOfColumn} 0-based]");
             }
 
             if (rowEliminations.Count > 0)
             {
-                log.AppendLine($"\n  RETURNING {rowEliminations.Distinct().Count()} row-based eliminations");
-                System.IO.File.AppendAllText(logPath, log.ToString());
+                log?.AppendLine($"\n  RETURNING {rowEliminations.Distinct().Count()} row-based eliminations");
+                if (Model.SudokuPuzzle.EnableVerboseFileLogging && log != null)
+                    System.IO.File.AppendAllText(logPath, log.ToString());
                 return new SingleStepSolution(rowEliminations.Distinct().ToArray(), StrategyName);
             }
 
             // Then try column-based patterns
-            log.AppendLine($"\n  Computing COLUMN-based eliminations from {cellCandidatePairsPerColumn.Count} patterns...");
+            log?.AppendLine($"\n  Computing COLUMN-based eliminations from {cellCandidatePairsPerColumn.Count} patterns...");
             var colEliminations = GetEliminations(cellCandidatePairsPerColumn, false, sudokuPuzzle).ToList();
-            log.AppendLine($"  -> Found {colEliminations.Count} column-based eliminations:");
+            log?.AppendLine($"  -> Found {colEliminations.Count} column-based eliminations:");
             foreach (var e in colEliminations)
             {
-                log.AppendLine($"      Eliminate {e.Value} from R{e.IndexOfRow + 1}C{e.IndexOfColumn + 1} (1-based) [raw: row={e.IndexOfRow}, col={e.IndexOfColumn} 0-based]");
+                log?.AppendLine($"      Eliminate {e.Value} from R{e.IndexOfRow + 1}C{e.IndexOfColumn + 1} (1-based) [raw: row={e.IndexOfRow}, col={e.IndexOfColumn} 0-based]");
             }
 
             if (colEliminations.Count > 0)
             {
-                log.AppendLine($"\n  RETURNING {colEliminations.Distinct().Count()} column-based eliminations");
-                System.IO.File.AppendAllText(logPath, log.ToString());
+                log?.AppendLine($"\n  RETURNING {colEliminations.Distinct().Count()} column-based eliminations");
+                if (Model.SudokuPuzzle.EnableVerboseFileLogging && log != null)
+                    System.IO.File.AppendAllText(logPath, log.ToString());
                 return new SingleStepSolution(colEliminations.Distinct().ToArray(), StrategyName);
             }
 
-            log.AppendLine("\n  No eliminations found, returning null");
-            System.IO.File.AppendAllText(logPath, log.ToString());
+            log?.AppendLine("\n  No eliminations found, returning null");
+            if (Model.SudokuPuzzle.EnableVerboseFileLogging && log != null)
+                System.IO.File.AppendAllText(logPath, log.ToString());
             return null;
         }
 
