@@ -90,9 +90,7 @@ namespace SimpleSudokuSolver.Strategy
                                 if (cellsWithZ.Count != 3) continue;
 
                                 // DEBUG: Log the pattern being evaluated
-                                var logPath = System.IO.Path.Combine(
-                                    System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
-                                    "github.com", "sudoku-app", "memory-bank", "short-term", "logs", "sss_wxyzwing_debug.log");
+                                var logPath = @"C:\github.com\sudoku-app\memory-bank\short-term\logs\sss_wxyzwing_debug.log";
                                 try
                                 {
                                     System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(logPath));
@@ -128,9 +126,23 @@ namespace SimpleSudokuSolver.Strategy
                                 }
                                 catch { /* Ignore logging errors */ }
 
-                                if (!allInSameRow && !allInSameCol && !allInSameBox)
+                                // CRITICAL FIX: Z must be NON-restricted (NOT all cells in same unit).
+                                // If Z-cells ARE all confined to the same unit, they form an internal
+                                // Almost Locked Set constraint and NO external eliminations are valid.
+                                // Previous logic was INVERTED - required same unit, which is wrong.
+                                if (allInSameRow || allInSameCol || allInSameBox)
                                 {
-                                    try { System.IO.File.AppendAllText(logPath, $"  => REJECTED: Z-cells not in same unit\n"); }
+                                    try { System.IO.File.AppendAllText(logPath, $"  => REJECTED: Z-cells all in same unit (restricted common candidate)\n"); }
+                                    catch { }
+                                    continue;
+                                }
+                                // CRITICAL FIX #2: Validate that Z is actually FORCED into one of the Z-cells.
+                                // If we remove Z from all Z-cells and the remaining candidates still 
+                                // allow a valid assignment, then Z can come from OUTSIDE the pattern,
+                                // making the WXYZ-Wing invalid.
+                                if (!IsZForcedIntoPattern(hinge, wing1, wing2, wing3, zCandidate, logPath))
+                                {
+                                    try { System.IO.File.AppendAllText(logPath, $"  => REJECTED: Z not forced into pattern (cells can be solved without Z)\n"); }
                                     catch { }
                                     continue;
                                 }
@@ -200,6 +212,100 @@ namespace SimpleSudokuSolver.Strategy
             }
 
             return eliminations;
+        }
+
+        /// <summary>
+        /// Validates that Z is actually forced into one of the pattern cells.
+        /// If removing Z from all Z-cells still allows a valid candidate assignment,
+        /// then Z can come from outside the pattern, making the WXYZ-Wing invalid.
+        /// </summary>
+        private bool IsZForcedIntoPattern(Cell hinge, Cell wing1, Cell wing2, Cell wing3, int zCandidate, string logPath)
+        {
+            var cells = new[] { hinge, wing1, wing2, wing3 };
+
+            // Get candidates for each cell, REMOVING Z from all that have it
+            var candidatesWithoutZ = cells.Select(c =>
+                c.CanBe.Where(v => v != zCandidate).ToList()
+            ).ToList();
+
+            // If any cell has no candidates left after removing Z, Z is forced
+            if (candidatesWithoutZ.Any(c => c.Count == 0))
+            {
+                return true; // Z is forced (at least one cell NEEDS Z)
+            }
+
+            // Try to find a valid assignment using simple constraint propagation
+            // If we can assign all 4 cells without using Z, the pattern is invalid
+            return !CanAssignWithoutZ(cells, candidatesWithoutZ, logPath);
+        }
+
+        /// <summary>
+        /// Attempts to find a valid assignment for the 4 cells using only non-Z candidates.
+        /// Uses simple propagation: repeatedly assign cells with single candidates,
+        /// then eliminate from peers. Returns true if assignment succeeds (pattern invalid).
+        /// </summary>
+        private bool CanAssignWithoutZ(Cell[] cells, List<List<int>> candidateLists, string logPath)
+        {
+            // Work on copies
+            var remaining = candidateLists.Select(c => new List<int>(c)).ToList();
+            var assigned = new int?[4];
+
+            bool changed = true;
+            while (changed)
+            {
+                changed = false;
+
+                // Find cells with single candidate and assign them
+                for (int i = 0; i < 4; i++)
+                {
+                    if (assigned[i] == null && remaining[i].Count == 1)
+                    {
+                        int value = remaining[i][0];
+                        assigned[i] = value;
+                        changed = true;
+
+                        // Remove this value from peers (cells that see this cell)
+                        for (int j = 0; j < 4; j++)
+                        {
+                            if (i != j && assigned[j] == null &&
+                                SolverUtility.CellsSeeEachOther(cells[i], cells[j]))
+                            {
+                                remaining[j].Remove(value);
+                            }
+                        }
+                    }
+                }
+
+                // Check for contradiction (cell with no candidates)
+                for (int i = 0; i < 4; i++)
+                {
+                    if (assigned[i] == null && remaining[i].Count == 0)
+                    {
+                        return false; // Contradiction - can't assign without Z
+                    }
+                }
+            }
+
+            // Check if all cells are assigned
+            if (assigned.All(a => a != null))
+            {
+                return true; // All cells assigned without Z - pattern is INVALID
+            }
+
+            // Some cells still have multiple options - do simple check
+            // If remaining cells all have at least one candidate and no conflicts, assume valid
+            for (int i = 0; i < 4; i++)
+            {
+                if (assigned[i] == null && remaining[i].Count > 0)
+                {
+                    // Cell has options, pattern might still work without Z
+                    // For safety, if we reach here with unresolved cells but no contradiction,
+                    // assume the pattern might be invalid (conservative approach)
+                    return true; // Assume pattern is invalid (can assign without Z)
+                }
+            }
+
+            return false;
         }
     }
 }
