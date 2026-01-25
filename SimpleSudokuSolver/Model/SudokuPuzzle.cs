@@ -37,7 +37,7 @@ namespace SimpleSudokuSolver.Model
         /// <summary>
         /// If true, enables verbose file logging in strategies. Set to false for Beast Mode performance.
         /// </summary>
-        public static bool EnableVerboseFileLogging { get; set; } = false;
+        public static bool EnableVerboseFileLogging { get; set; } = true;
 
         private readonly List<Tuple<SingleStepSolution, int[]>> _steps =
           new List<Tuple<SingleStepSolution, int[]>>();
@@ -111,6 +111,8 @@ namespace SimpleSudokuSolver.Model
                 var cell = Cells[singleStepSolution.Result.IndexOfRow, singleStepSolution.Result.IndexOfColumn];
                 oldCanBe = cell.CanBe.ToArray();
                 cell.Value = singleStepSolution.Result.Value;
+
+                // Atomic Cleanup removed in favor of Nuclear Cleanup (see below)
             }
             if (singleStepSolution.Eliminations != null)
             {
@@ -130,6 +132,51 @@ namespace SimpleSudokuSolver.Model
                     }
 
                     Cells[elimination.IndexOfRow, elimination.IndexOfColumn].CanBe.Remove(elimination.Value);
+                }
+            }
+
+            // NUCLEAR CLEANUP: Enforce full board consistency
+            // Iterate every cell. If it has a value, ensure that value is removed from all its peers.
+            // This guarantees that the board state (Candidates) is 100% consistent with the Values.
+            // We run this whenever a value is placed (Result != null).
+            if (singleStepSolution.Result != null)
+            {
+                for (int r = 0; r < NumberOfRowsOrColumnsInPuzzle; r++)
+                {
+                    for (int c = 0; c < NumberOfRowsOrColumnsInPuzzle; c++)
+                    {
+                        var loopCell = Cells[r, c];
+                        if (loopCell.Value > 0)
+                        {
+                            // 1. Clear candidates of the placed cell itself (sanity check)
+                            loopCell.CanBe.Clear();
+
+                            int val = loopCell.Value;
+
+                            // 2. Remove this value from all peers (Row)
+                            foreach (var peer in Rows[r].Cells)
+                                if (peer != loopCell) peer.CanBe.Remove(val);
+
+                            // 3. Remove this value from all peers (Column)
+                            foreach (var peer in Columns[c].Cells)
+                                if (peer != loopCell) peer.CanBe.Remove(val);
+
+                            // 4. Remove this value from all peers (Block)
+                            var (br, bc) = GetBlockIndex(loopCell);
+                            if (br != -1)
+                            {
+                                var block = Blocks[br, bc];
+                                for (int i = 0; i < NumberOfRowsOrColumnsInBlock; i++)
+                                {
+                                    for (int j = 0; j < NumberOfRowsOrColumnsInBlock; j++)
+                                    {
+                                        var peer = block.Cells[i, j];
+                                        if (peer != loopCell && peer != null) peer.CanBe.Remove(val);
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -176,6 +223,62 @@ namespace SimpleSudokuSolver.Model
                 }
                 logLines.Add("");
                 System.IO.File.AppendAllLines(StepLogPath, logLines);
+            }
+            // DEEP STATE LOGGING: Dump the entire board (Values + Candidates) to a separate file for analysis
+            string logTitle = $"Step {_steps.Count}: {singleStepSolution.Strategy}";
+
+            // Add Placement details
+            if (singleStepSolution.Result != null)
+            {
+                logTitle += $" [Placement: {singleStepSolution.Result.Value} @ R{singleStepSolution.Result.IndexOfRow + 1}C{singleStepSolution.Result.IndexOfColumn + 1}]";
+            }
+
+            // Add Elimination details
+            if (singleStepSolution.Eliminations != null && singleStepSolution.Eliminations.Length > 0)
+            {
+                logTitle += $" [Eliminations: {string.Join(", ", singleStepSolution.Eliminations.Select(e => $"{e.Value} @ R{e.IndexOfRow + 1}C{e.IndexOfColumn + 1}"))}]";
+            }
+            LogDetailedState(logTitle);
+        }
+
+        private void LogDetailedState(string stepName)
+        {
+            try
+            {
+                // Hardcoded path for debugging - easier than passing config through the library
+                string dumpPath = @"c:\github.com\sudoku-app\memory-bank\short-term\logs\puzzle-board-dump.log";
+
+                var sb = new System.Text.StringBuilder();
+                sb.AppendLine("════════════════════════════════════════════════════════════════════════════════");
+                sb.AppendLine($"TIMESTAMP: {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}");
+                sb.AppendLine($"ACTION: {stepName}");
+                sb.AppendLine("════════════════════════════════════════════════════════════════════════════════");
+
+                for (int r = 0; r < NumberOfRowsOrColumnsInPuzzle; r++)
+                {
+                    sb.Append($"R{r + 1}: ");
+                    for (int c = 0; c < NumberOfRowsOrColumnsInPuzzle; c++)
+                    {
+                        var cell = Cells[r, c];
+                        if (cell.HasValue)
+                        {
+                            sb.Append($"[{cell.Value}]".PadRight(12));
+                        }
+                        else
+                        {
+                            string candidates = "(" + string.Join("", cell.CanBe) + ")";
+                            sb.Append(candidates.PadRight(12));
+                        }
+                    }
+                    sb.AppendLine();
+                }
+                sb.AppendLine();
+
+                System.IO.File.AppendAllText(dumpPath, sb.ToString());
+            }
+            catch
+            {
+                // Ignore logging errors to prevent game crash
             }
         }
 

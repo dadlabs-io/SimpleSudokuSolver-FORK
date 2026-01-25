@@ -38,8 +38,10 @@ namespace SimpleSudokuSolver.Strategy
         if (!cell.HasValue)
         {
           var cellInCopy = copy.Cells[cell.RowIndex, cell.ColumnIndex];
-          cellInCopy.CanBe.Clear();
-          cellInCopy.CanBe.AddRange(cell.CanBe);
+          // ROBUSTNESS FIX: Do NOT copy candidates from the source puzzle.
+          // The source puzzle may have "Candidate Amnesia" or invalid eliminations from buggy strategies.
+          // By strictly leaving CanBe as [1-9] (default) and letting the recursive solver check constraints,
+          // we ensure we never get stuck due to a corrupted candidate list.
         }
       }
 
