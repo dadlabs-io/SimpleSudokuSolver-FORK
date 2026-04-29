@@ -35,9 +35,16 @@ namespace SimpleSudokuSolver.Model
         public string StepLogPath { get; set; }
 
         /// <summary>
-        /// If true, enables verbose file logging in strategies. Set to false for Beast Mode performance.
+        /// If true, enables verbose file logging in strategies that write to hardcoded
+        /// Windows-only debug paths (e.g. <c>c:\github.com\sudoku-app\memory-bank\…</c>).
+        /// MUST default to <c>false</c> — when true, on non-Windows runtimes (Android,
+        /// iOS) every hint request throws IOException from the unguarded
+        /// <c>File.AppendAllLines</c> calls in <c>BasicElimination</c>, <c>XYChain</c>,
+        /// <c>LockedCandidates*</c>, <c>LWing</c>, <c>WXYZWing</c>, etc., causing the
+        /// whole hint pipeline to silently return "no hint available". Devs can flip
+        /// this to <c>true</c> manually when debugging on Windows.
         /// </summary>
-        public static bool EnableVerboseFileLogging { get; set; } = true;
+        public static bool EnableVerboseFileLogging { get; set; } = false;
 
         private readonly List<Tuple<SingleStepSolution, int[]>> _steps =
           new List<Tuple<SingleStepSolution, int[]>>();
